@@ -12,6 +12,6 @@ export async function runSync(formData: FormData) {
 
 export async function remap() {
   const supabase = await createClient();
-  await supabase.rpc("map_catalog");
+  await supabase.rpc("map_catalog_secure");
   revalidatePath("/sync");
 }
