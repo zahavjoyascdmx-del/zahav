@@ -4,7 +4,7 @@ import { fechaCorta, mxn, num } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 type Row = {
-  inventory_id: string; snapshot_date: string; item_id: string | null; variant_id: number | null; product_id: number | null;
+  inventory_id: string; snapshot_date: string; item_id: string | null; variation_id: number | null; variant_id: number | null; product_id: number | null;
   producto: string | null; categoria: string | null; color: string | null; talla: string | null;
   available: number; in_transit: number; not_available: number; item_status: string | null; title: string | null;
 };
