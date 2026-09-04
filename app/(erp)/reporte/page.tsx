@@ -54,7 +54,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
     <>
       <div className="page-head">
         <div>
-          <h1>Reporte mensual · {nombreMes(mes)}</h1>
+          <h1>Reporte mensual · {nombreMes(mes)} <Link href="/reporte/anual" className="chip" style={{ verticalAlign: "middle", marginLeft: 8, fontSize: 13 }}>Resumen anual</Link></h1>
           <div className="muted">
             Mismo cálculo que tu Excel: costo = gramaje × precio del oro del mes de cada proveedor (+ costo fijo de piedra o pieza), insumos por pieza, utilidad neta y % de ganancia sobre lo invertido.
             {esMesActual && " Mes en curso: los números crecen cada día."}
