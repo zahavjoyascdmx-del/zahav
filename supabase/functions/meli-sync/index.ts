@@ -1,5 +1,5 @@
 // Edge Function: sincronización con Mercado Libre.
-// Se invoca con POST { kind: "incremental" | "daily" | "items" | "stock" | "orders" | "backfill" | "shipments" | "payments" | "visits" | "token" | "full" }
+// Se invoca con POST { kind: "incremental" | "daily" | "items" | "stock" | "orders" | "backfill" | "shipments" | "payments" | "visits" | "ads" | "ads_backfill" | "billing" | "token" | "full" }
 // y el header x-sync-key (clave guardada en private.sync_secrets).
 import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 
@@ -421,6 +421,168 @@ async function syncVisits(stats: Json, errors: string[]) {
   stats.visits = rows.length;
 }
 
+
+// ---------------------------------------------------------------- publicidad (Product Ads)
+const ADS_HEADERS = { "api-version": "2" };
+let advertiser: { id: number; site: string } | null = null;
+
+async function getAdvertiser() {
+  if (advertiser) return advertiser;
+  const r = await meli("/advertising/advertisers?product_id=PADS", 0, { "api-version": "1" });
+  const a = r?.advertisers?.[0];
+  if (!a) throw new Error("Sin cuenta de Product Ads");
+  advertiser = { id: a.advertiser_id, site: a.site_id ?? "MLM" };
+  return advertiser;
+}
+
+const ADS_METRICS = "clicks,prints,cost,units_quantity,direct_amount,indirect_amount,total_amount";
+
+/** Métricas de un día: por campaña y por publicación. La API solo agrega por rango, así que se consulta día por día. */
+async function syncAdsDay(day: string, stats: Json) {
+  const adv = await getAdvertiser();
+  const base = `/marketplace/advertising/${adv.site}/advertisers/${adv.id}/product_ads`;
+  const q = `date_from=${day}&date_to=${day}&metrics=${ADS_METRICS}`;
+  const camp: Json[] = [];
+  for (let offset = 0; offset < 500; offset += 50) {
+    const r = await meli(`${base}/campaigns/search?limit=50&offset=${offset}&${q}`, 0, ADS_HEADERS, true);
+    for (const c of r?.results ?? []) {
+      const m = c.metrics ?? {};
+      camp.push({
+        fecha: day, campaign_id: c.id, campaign_name: c.name ?? null, status: c.status ?? null,
+        cost: m.cost ?? 0, clicks: m.clicks ?? 0, prints: m.prints ?? 0, units: m.units_quantity ?? 0,
+        direct_amount: m.direct_amount ?? 0, indirect_amount: m.indirect_amount ?? 0, total_amount: m.total_amount ?? 0,
+        daily_budget: c.daily_budget ?? null, acos_target: c.acos_target ?? null, synced_at: new Date().toISOString(),
+      });
+    }
+    if ((r?.results ?? []).length < 50) break;
+  }
+  const ads: Json[] = [];
+  for (let offset = 0; offset < 2000; offset += 100) {
+    const r = await meli(`${base}/ads/search?limit=100&offset=${offset}&${q}`, 0, ADS_HEADERS, true);
+    for (const a of r?.results ?? []) {
+      const m = a.metrics ?? {};
+      if (!(m.cost > 0 || m.clicks > 0 || m.prints > 0 || m.units_quantity > 0)) continue;
+      ads.push({
+        fecha: day, item_id: a.item_id, campaign_id: a.campaign_id ?? null, title: a.title ?? null,
+        cost: m.cost ?? 0, clicks: m.clicks ?? 0, prints: m.prints ?? 0, units: m.units_quantity ?? 0,
+        direct_amount: m.direct_amount ?? 0, indirect_amount: m.indirect_amount ?? 0, total_amount: m.total_amount ?? 0,
+        synced_at: new Date().toISOString(),
+      });
+    }
+    if ((r?.results ?? []).length < 100) break;
+  }
+  await upsert("meli_ads_daily", camp, "fecha,campaign_id");
+  await upsert("meli_ads_items_daily", ads, "fecha,item_id");
+  stats.ads_days = ((stats.ads_days as number) ?? 0) + 1;
+  stats.ads_rows = ((stats.ads_rows as number) ?? 0) + camp.length + ads.length;
+}
+
+/** Últimos `days` días (las métricas de ayer se consolidan a las 10:00 GMT-3, por eso se repasan varios días). */
+async function syncAds(stats: Json, errors: string[], days: number) {
+  const today = cdmxDate();
+  for (let i = 0; i < days && timeLeft() > 15_000; i++) {
+    const d = new Date(today + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - i);
+    try {
+      await syncAdsDay(d.toISOString().slice(0, 10), stats);
+    } catch (e) {
+      errors.push("ads " + String(e).slice(0, 200));
+    }
+  }
+}
+
+/** Historial: hasta 90 días hacia atrás (límite de la API), desde el día más antiguo que aún no tenemos. */
+async function syncAdsBackfill(stats: Json, errors: string[]) {
+  const today = cdmxDate();
+  const { data } = await sb.from("meli_ads_daily").select("fecha").order("fecha", { ascending: true }).limit(1).maybeSingle();
+  const oldest = data?.fecha ? new Date(data.fecha + "T12:00:00Z") : new Date(today + "T12:00:00Z");
+  const limit = new Date(today + "T12:00:00Z");
+  limit.setUTCDate(limit.getUTCDate() - 89);
+  let d = new Date(oldest);
+  if (!data?.fecha) d.setUTCDate(d.getUTCDate() + 1); // sin datos: empezar por hoy
+  while (timeLeft() > 15_000) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    if (d < limit) { stats.ads_backfill_done = true; break; }
+    try {
+      await syncAdsDay(d.toISOString().slice(0, 10), stats);
+    } catch (e) {
+      errors.push("ads " + String(e).slice(0, 200));
+      break;
+    }
+  }
+  stats.ads_backfill_oldest = d.toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------- facturación de Mercado Libre (cargos que no se descuentan de la venta)
+// La API de facturación admite 5 consultas por minuto: se espacian las llamadas y se sincroniza en su propia corrida.
+let lastBillingCall = 0;
+async function billingGet(path: string) {
+  const wait = lastBillingCall + 13_000 - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastBillingCall = Date.now();
+  try {
+    return await meli(path, 3, {}, true); // attempt=3: sin reintentos internos, el 429 se maneja aquí
+  } catch (e) {
+    if (String(e).includes("429")) {
+      await sleep(61_000);
+      lastBillingCall = Date.now();
+      return await meli(path, 3, {}, true);
+    }
+    throw e;
+  }
+}
+
+/** Sincroniza los periodos indicados (keys) o los últimos `periods`. Guarda el detalle de cargos y el resumen del periodo. */
+async function syncBilling(stats: Json, errors: string[], periods: number, keys?: string[]) {
+  let list: string[] = keys ?? [];
+  if (!list.length) {
+    const r = await billingGet(`/billing/integration/monthly/periods?group=ML&document_type=BILL&offset=0&limit=${periods}`);
+    list = (r?.results ?? []).map((p: Json) => String(p.key));
+  }
+  let total = 0;
+  for (const key of list) {
+    if (timeLeft() < 30_000) { errors.push(`billing: sin tiempo para el periodo ${key}, se reintenta en la próxima corrida`); break; }
+    let fromId = 0;
+    while (timeLeft() > 20_000) {
+      const r = await billingGet(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&from_id=${fromId}`);
+      const rows: Json[] = [];
+      for (const d of r?.results ?? []) {
+        const ci = d.charge_info ?? {};
+        rows.push({
+          detail_id: ci.detail_id,
+          period_key: key,
+          creation_date: ci.creation_date_time ?? null,
+          detail_type: ci.detail_type ?? null,
+          detail_sub_type: ci.detail_sub_type ?? null,
+          transaction_detail: ci.transaction_detail ?? null,
+          amount: ci.detail_amount ?? 0,
+          debited_from_operation: ci.debited_from_operation === "YES" || ci.debited_from_operation === "SI",
+          order_id: d.sales_info?.order_id ?? d.sales_info?.[0]?.order_id ?? null,
+          document_id: d.document_info?.document_id ?? null,
+          raw: d,
+          synced_at: new Date().toISOString(),
+        });
+      }
+      await upsert("meli_billing_details", rows);
+      total += rows.length;
+      const results = r?.results ?? [];
+      if (results.length < 1000 || !r?.last_id || r.last_id === fromId) break;
+      fromId = r.last_id;
+    }
+    if (timeLeft() < 20_000) break;
+    const s = await billingGet(`/billing/integration/periods/key/${key}/summary/details?group=ML&document_type=BILL`);
+    if (s?.bill_includes) {
+      await upsert("meli_billing_periods", [{
+        period_key: key, date_from: s.period?.date_from ?? null, date_to: s.period?.date_to ?? null,
+        total_amount: s.bill_includes.total_amount ?? 0, unpaid_amount: s.payment_collected?.total_debt ?? 0,
+        charges: s.bill_includes.charges ?? [], bonuses: s.bill_includes.bonuses ?? [], raw: s, synced_at: new Date().toISOString(),
+      }], "period_key");
+    }
+    stats.billing_periods = ((stats.billing_periods as number) ?? 0) + 1;
+  }
+  stats.billing_details = total;
+}
+
 // ---------------------------------------------------------------- handler
 Deno.serve(async (req: Request) => {
   startedAt = Date.now();
@@ -452,6 +614,9 @@ Deno.serve(async (req: Request) => {
     if (has("shipments", "incremental", "backfill", "full")) await syncShipments(stats, errors, Number(body.limit ?? 150));
     if (has("payments", "incremental", "full")) await syncPayments(stats, errors, Number(body.limit ?? 150));
     if (has("visits", "daily", "full")) await syncVisits(stats, errors);
+    if (has("ads", "daily", "full")) await syncAds(stats, errors, Number(body.days ?? 3));
+    if (has("ads_backfill")) await syncAdsBackfill(stats, errors);
+    if (has("billing")) await syncBilling(stats, errors, Number(body.periods ?? 2), Array.isArray(body.keys) ? body.keys.map(String) : undefined);
     if (has("token")) { await refreshToken(); stats.token = "renovado"; }
     await finish(errors.length ? "partial" : "ok");
     return json({ ok: true, run: run?.id, kind, stats, errors: errors.slice(0, 20) });

@@ -42,7 +42,7 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
             <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
               <label>Contabilidad<input name="contabilidad" type="number" step="1" defaultValue={fijos.contabilidad ?? 3500} /></label>
               <label>Intereses<input name="intereses" type="number" step="1" defaultValue={fijos.intereses ?? 4000} /></label>
-              <label>Publicidad<input name="publicidad" type="number" step="1" defaultValue={fijos.publicidad ?? 0} /></label>
+              <label>Publicidad (solo meses sin datos de Product Ads)<input name="publicidad" type="number" step="1" defaultValue={fijos.publicidad ?? 0} /></label>
             </div>
             <h2 style={{ marginTop: 18 }}>Pedido sugerido</h2>
             <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>

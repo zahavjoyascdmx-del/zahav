@@ -11,6 +11,8 @@ const KINDS: [string, string][] = [
   ["stock", "Stock en Full"],
   ["visits", "Visitas"],
   ["shipments", "Costos de envío pendientes"],
+  ["ads", "Publicidad (Product Ads) · últimos 3 días"],
+  ["billing", "Facturación de ML · cargos del mes y anterior"],
 ];
 
 export default async function SyncPage() {
@@ -21,7 +23,7 @@ export default async function SyncPage() {
       <div className="page-head">
         <div>
           <h1>Sincronización</h1>
-          <div className="muted">Automática cada hora (órdenes y stock) y cada noche (publicaciones y visitas). Aquí puedes forzarla.</div>
+          <div className="muted">Automática cada hora (órdenes y stock) y cada noche (publicaciones, visitas, publicidad y facturación de ML). Aquí puedes forzarla.</div>
         </div>
       </div>
       <div className="card" style={{ marginBottom: 14 }}>

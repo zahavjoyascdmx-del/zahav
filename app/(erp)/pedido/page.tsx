@@ -16,8 +16,9 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
   const desde = addDays(hoy, -(dias - 1));
   const meses = listaMeses(hoy, Math.ceil(dias / 30) + 1);
   const supabase = await createClient();
-  const [reps, vars, cfg, porMes] = await Promise.all([
+  const [reps, pubs, vars, cfg, porMes] = await Promise.all([
     Promise.all(meses.map((m) => supabase.rpc("reporte_mensual", { p_mes: m.mes }))),
+    Promise.all(meses.map((m) => supabase.rpc("publicidad_mes", { p_mes: m.mes }))),
     supabase.rpc("ventas_variantes_todas", { p_desde: desde, p_hasta: hoy }),
     supabase.from("settings").select("key,value").in("key", ["presupuesto", "lead_time_days", "buffer_days", "gastos_fijos"]),
     supabase.rpc("ventas_por_mes", { p_meses: 4 }),
@@ -44,11 +45,13 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
   const base = new Map<number, FilaCalculada>();
   for (const r of (reps[0].data ?? []) as FilaReporte[]) {
     const f = calcularFila(r, meses[0].mes);
-    base.set(f.product_id, { ...f, piezas: 0, venta: 0, comision: 0, envio: 0, ret_iva: 0, ret_isr: 0, cupon: 0, recibido: 0, gastos: 0, insumos: 0, utilidad_bruta: 0, utilidad_neta: 0, dias_con_venta: 0 });
+    base.set(f.product_id, { ...f, piezas: 0, venta: 0, comision: 0, envio: 0, ret_iva: 0, ret_isr: 0, cupon: 0, recibido: 0, gastos: 0, insumos: 0, publicidad: 0, utilidad_bruta: 0, utilidad_neta: 0, dias_con_venta: 0 });
   }
   reps.forEach((rep, i) => {
+    const pub = new Map<number, number>();
+    for (const x of (pubs[i].data ?? []) as { product_id: number | null; cost: number }[]) if (x.product_id != null) pub.set(x.product_id, Number(x.cost));
     for (const r of (rep.data ?? []) as FilaReporte[]) {
-      const f = calcularFila(r, meses[i].mes);
+      const f = calcularFila({ ...r, publicidad: pub.get(r.product_id) ?? 0 }, meses[i].mes);
       const b = base.get(f.product_id);
       if (!b) continue;
       // el periodo empieza en `desde`: el mes más viejo entra solo en la parte proporcional
@@ -59,7 +62,7 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
       const k = Math.min(1, diasDentro / diasMes);
       if (k <= 0) continue;
       b.piezas += f.piezas * k; b.venta = Number(b.venta) + Number(f.venta) * k; b.recibido += f.recibido * k;
-      b.gastos += f.gastos * k; b.insumos += f.insumos * k; b.utilidad_bruta += f.utilidad_bruta * k; b.utilidad_neta += f.utilidad_neta * k;
+      b.gastos += f.gastos * k; b.insumos += f.insumos * k; b.publicidad += f.publicidad * k; b.utilidad_bruta += f.utilidad_bruta * k; b.utilidad_neta += f.utilidad_neta * k;
       b.dias_con_venta = Number(b.dias_con_venta) + Number(f.dias_con_venta) * k;
     }
   });
@@ -172,7 +175,7 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
         Cómo se corrige el ritmo: {haySnapshots
           ? "con la foto diaria de stock en Full se cuentan los días que cada talla estuvo en cero y se calcula piezas ÷ días con stock."
           : "la foto diaria de stock en Full empezó a guardarse hoy; mientras no haya 14 días de historia, una talla que hoy está en cero se considera agotada desde su última venta (piezas ÷ días con stock, máximo 3×). Cada semana la estimación será más exacta."}
-        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos). El presupuesto se reparte primero a lo que más utilidad diaria deja y está por agotarse.
+        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos − publicidad de Product Ads de cada publicación). El presupuesto se reparte primero a lo que más utilidad diaria deja y está por agotarse.
       </p>
     </>
   );
