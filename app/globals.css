@@ -129,3 +129,21 @@ details.acc summary:hover { background: #f8faf8; }
 .acc-nums > span > b { font-size: 17px; font-weight: 800; }
 .acc-nums > span > small { display: block; font-size: 11px; color: var(--ink-soft); }
 details.acc .tbl-wrap { border-top: 1px solid var(--line); }
+
+/* ---- móvil: barra superior con navegación ---- */
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: none; }
+@media (max-width: 700px) {
+  .topbar { display: block; position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid var(--line); }
+  .topbar-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px 6px; }
+  .topnav { display: flex; gap: 6px; overflow-x: auto; padding: 4px 12px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .topnav a { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .topnav a.active { background: var(--felt); border-color: var(--felt); color: #fff; }
+  .page-head { flex-direction: column; align-items: flex-start; }
+  .kpi .value { font-size: 22px; }
+  .kpi-row { gap: 12px; }
+  .kpi-row > div { min-width: 100px; }
+  .form-grid .wide { grid-column: span 2; }
+  h1 { font-size: 21px; }
+}
