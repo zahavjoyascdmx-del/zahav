@@ -1,5 +1,5 @@
 // Edge Function: sincronización con Mercado Libre.
-// Se invoca con POST { kind: "incremental" | "daily" | "items" | "stock" | "orders" | "backfill" | "shipments" | "visits" | "full" }
+// Se invoca con POST { kind: "incremental" | "daily" | "items" | "stock" | "orders" | "backfill" | "shipments" | "payments" | "visits" | "token" | "full" }
 // y el header x-sync-key (clave guardada en private.sync_secrets).
 import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 
@@ -42,7 +42,11 @@ async function loadCreds(): Promise<Creds> {
 }
 
 async function refreshToken(): Promise<string> {
-  const c = creds ?? (await loadCreds());
+  // Otra corrida pudo renovar el token hace un momento: releer antes de gastar el refresh_token (es de un solo uso).
+  const c = await loadCreds();
+  if (c.access_token && c.expires_at && new Date(c.expires_at).getTime() - Date.now() > 30 * 60_000) {
+    return c.access_token;
+  }
   const res = await fetch(API + "/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -371,6 +375,37 @@ async function syncShipments(stats: Json, errors: string[], limit: number) {
   stats.shipments_pending = (pending?.length ?? 0) - rows.length;
 }
 
+// ---------------------------------------------------------------- pagos (Mercado Pago)
+async function syncPayments(stats: Json, errors: string[], limit: number) {
+  const { data: pending, error } = await sb.rpc("pending_payments", { p_limit: limit });
+  if (error) throw new Error(error.message);
+  const rows: Json[] = [];
+  // deno-lint-ignore no-explicit-any
+  await pool((pending ?? []) as any[], 5, async (p) => {
+    const pay = await meli(`/v1/payments/${p.payment_id}`);
+    if (!pay) return;
+    rows.push({
+      payment_id: p.payment_id,
+      order_id: p.order_id,
+      status: pay.status ?? null,
+      status_detail: pay.status_detail ?? null,
+      date_approved: pay.date_approved ?? null,
+      transaction_amount: pay.transaction_amount ?? null,
+      total_paid_amount: pay.transaction_details?.total_paid_amount ?? null,
+      net_received_amount: pay.transaction_details?.net_received_amount ?? null,
+      shipping_amount: pay.shipping_amount ?? null,
+      coupon_amount: pay.coupon_amount ?? null,
+      charges: pay.charges_details ?? [],
+      fee_details: pay.fee_details ?? [],
+      raw: pay,
+      synced_at: new Date().toISOString(),
+    });
+  }, errors);
+  await upsert("meli_payments", rows);
+  stats.payments = rows.length;
+  stats.payments_pending = (pending?.length ?? 0) - rows.length;
+}
+
 // ---------------------------------------------------------------- visitas
 async function syncVisits(stats: Json, errors: string[]) {
   const { data: its } = await sb.from("meli_items").select("item_id").in("status", ["active", "paused"]);
@@ -414,6 +449,7 @@ Deno.serve(async (req: Request) => {
     if (has("orders", "incremental", "full")) await syncOrdersIncremental(stats, Number(body.days ?? 60));
     if (has("backfill")) await syncOrdersBackfill(stats, body.from);
     if (has("shipments", "incremental", "backfill", "full")) await syncShipments(stats, errors, Number(body.limit ?? 150));
+    if (has("payments", "incremental", "full")) await syncPayments(stats, errors, Number(body.limit ?? 150));
     if (has("visits", "daily", "full")) await syncVisits(stats, errors);
     if (has("token")) { await refreshToken(); stats.token = "renovado"; }
     await finish(errors.length ? "partial" : "ok");

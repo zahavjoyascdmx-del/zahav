@@ -5,7 +5,7 @@ import { addDays, fechaCorta, fechaHora, mxn, num, todayCdmx } from "@/lib/forma
 
 export const dynamic = "force-dynamic";
 
-type Resumen = { ordenes: number; piezas: number; venta: number; comision: number; envio: number; canceladas: number };
+type Resumen = { ordenes: number; piezas: number; venta: number; comision: number; envio: number; canceladas: number; ret_iva: number; ret_isr: number; neto_recibido: number; con_pago: number };
 
 export default async function Home() {
   const supabase = await createClient();
@@ -24,7 +24,7 @@ export default async function Home() {
     supabase.rpc("stock_full_actual"),
   ]);
 
-  const resumenes = res.map((r) => (r.data?.[0] ?? { ordenes: 0, piezas: 0, venta: 0, comision: 0, envio: 0, canceladas: 0 }) as Resumen);
+  const resumenes = res.map((r) => (r.data?.[0] ?? { ordenes: 0, piezas: 0, venta: 0, comision: 0, envio: 0, canceladas: 0, ret_iva: 0, ret_isr: 0, neto_recibido: 0, con_pago: 0 }) as Resumen);
   const stockRows = (stock.data ?? []) as { available: number; item_status: string; producto: string | null }[];
   const agotadas = stockRows.filter((s) => s.available === 0 && s.item_status === "active").length;
   const maxVenta = Math.max(1, ...((dias.data ?? []) as { venta: number }[]).map((d) => Number(d.venta)));
@@ -43,13 +43,12 @@ export default async function Home() {
       <div className="grid grid-4">
         {rangos.map((r, i) => {
           const s = resumenes[i];
-          const neto = Number(s.venta) - Number(s.comision) - Number(s.envio);
           return (
             <Kpi
               key={r.label}
               label={r.label}
               value={mxn(s.venta)}
-              sub={`${num(s.piezas)} piezas · ${num(s.ordenes)} órdenes · neto ${mxn(neto)}`}
+              sub={`${num(s.piezas)} piezas · ${num(s.ordenes)} órdenes · te depositaron ${mxn(s.neto_recibido)}`}
             />
           );
         })}
@@ -96,10 +95,20 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="grid grid-3" style={{ marginTop: 14 }}>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Últimos 30 días · de la venta a tu cuenta <span className="muted">(datos de Mercado Pago, {num(resumenes[2].con_pago)} de {num(resumenes[2].ordenes)} órdenes con pago detallado)</span></h2>
+        <div className="kpi-row">
+          <div className="kpi"><div className="label">Venta</div><div className="value">{mxn(resumenes[2].venta)}</div></div>
+          <div className="kpi"><div className="label">Comisión ML</div><div className="value">{mxn(resumenes[2].comision)}</div></div>
+          <div className="kpi"><div className="label">Envíos a tu cargo</div><div className="value">{mxn(resumenes[2].envio)}</div></div>
+          <div className="kpi"><div className="label">Retención IVA</div><div className="value">{mxn(resumenes[2].ret_iva)}</div></div>
+          <div className="kpi"><div className="label">Retención ISR</div><div className="value">{mxn(resumenes[2].ret_isr)}</div></div>
+          <div className="kpi"><div className="label">Te depositaron</div><div className="value">{mxn(resumenes[2].neto_recibido)}</div></div>
+        </div>
+      </div>
+      <div className="grid grid-2" style={{ marginTop: 14 }}>
         <Kpi label="Tallas agotadas en Full" value={num(agotadas)} sub="variantes activas con 0 disponibles" />
         <Kpi label="Canceladas · 30 días" value={num(resumenes[2].canceladas)} sub="órdenes canceladas" />
-        <Kpi label="Comisión ML · 30 días" value={mxn(resumenes[2].comision)} sub={`envíos a tu cargo ${mxn(resumenes[2].envio)}`} />
       </div>
     </>
   );

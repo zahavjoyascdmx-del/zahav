@@ -5,7 +5,8 @@ import { remap, runSync } from "./actions";
 export const dynamic = "force-dynamic";
 
 const KINDS: [string, string][] = [
-  ["incremental", "Órdenes recientes + stock Full + envíos"],
+  ["incremental", "Órdenes recientes + stock Full + envíos + pagos"],
+  ["payments", "Pagos y retenciones pendientes"],
   ["items", "Publicaciones y variantes"],
   ["stock", "Stock en Full"],
   ["visits", "Visitas"],
