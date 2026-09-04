@@ -8,7 +8,7 @@ export function Logo({ width = 180, light = false }: { width?: number; light?: b
       <polygon points={DIAMOND_POINTS} fill="none" stroke={tan} strokeWidth={34} strokeLinejoin="miter" />
       <polyline points={Z_POINTS} fill="none" stroke={gold} strokeWidth={40} strokeLinejoin="miter" strokeLinecap="butt" />
       {LETTER_LINES.map(([x1, y1, x2, y2], i) => (
-        <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={gold} strokeWidth={18} strokeLinecap="butt" />
+        <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={gold} strokeWidth={16} strokeLinecap="butt" />
       ))}
     </svg>
   );

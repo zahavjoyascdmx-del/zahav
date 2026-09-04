@@ -60,7 +60,7 @@ function Logo({ width = 150 }: { width?: number }) {
       <Polygon points={DIAMOND_POINTS} fill="none" stroke={LOGO_TAN} strokeWidth={34} />
       <Polyline points={Z_POINTS} fill="none" stroke={GOLD} strokeWidth={40} />
       {LETTER_LINES.map(([x1, y1, x2, y2], i) => (
-        <Line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={GOLD} strokeWidth={18} />
+        <Line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={GOLD} strokeWidth={16} />
       ))}
     </Svg>
   );
