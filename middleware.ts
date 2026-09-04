@@ -3,20 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 
 export async function middleware(request: NextRequest) {
-  const url = SUPABASE_URL;
-  const key = SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    const faltan = [!url && "NEXT_PUBLIC_SUPABASE_URL", !key && "NEXT_PUBLIC_SUPABASE_ANON_KEY"].filter(Boolean).join(", ");
-    return new NextResponse(
-      `Faltan variables de entorno en Vercel: ${faltan}.\n` +
-        `Agrégalas en Vercel > Settings > Environment Variables marcando Production, Preview y Development, y vuelve a desplegar.`,
-      { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
-    );
-  }
-
   let response = NextResponse.next({ request });
   try {
-    const supabase = createServerClient(url, key, {
+    const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -29,10 +18,12 @@ export async function middleware(request: NextRequest) {
       },
     });
 
-    const { data: { user } } = await supabase.auth.getUser();
+    // getClaims valida el JWT localmente (sin viaje a Supabase en cada página).
+    const { data } = await supabase.auth.getClaims();
+    const logged = Boolean(data?.claims?.sub);
     const isLogin = request.nextUrl.pathname.startsWith("/login");
-    if (!user && !isLogin) return NextResponse.redirect(new URL("/login", request.url));
-    if (user && isLogin) return NextResponse.redirect(new URL("/", request.url));
+    if (!logged && !isLogin) return NextResponse.redirect(new URL("/login", request.url));
+    if (logged && isLogin) return NextResponse.redirect(new URL("/", request.url));
     return response;
   } catch (e) {
     return new NextResponse(`Error de autenticación: ${String(e)}`, {

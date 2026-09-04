@@ -98,3 +98,17 @@ td a:hover { text-decoration: underline; }
 .login { min-height: 100vh; display: grid; place-items: center; background: var(--felt); }
 .login .card { width: 360px; max-width: 92vw; }
 .login h1 { font-size: 28px; letter-spacing: 0.04em; }
+
+/* ---- loading ---- */
+.skeleton { background: linear-gradient(90deg, #e9ede9 25%, #f3f5f3 50%, #e9ede9 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 12px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-soft); }
+.form-grid input, .form-grid select, .form-grid textarea, .inline input, .inline select {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff;
+}
+.form-grid .wide { grid-column: span 2; }
+.inline { display: flex; gap: 6px; align-items: center; }
+.inline input { width: 110px; }
+.btn.small { padding: 6px 10px; font-size: 13px; }
