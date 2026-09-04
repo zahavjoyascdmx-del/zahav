@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { Nav } from "@/components/Nav";
+import { Logo } from "@/components/Logo";
 
 export default async function ErpLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
@@ -10,7 +11,7 @@ export default async function ErpLayout({ children }: { children: ReactNode }) {
   return (
     <div className="shell">
       <aside className="side">
-        <div className="brand">ZAHAV<small>ERP · JOYAS CDMX</small></div>
+        <div className="brand"><Logo width={160} light /><small>ERP · JOYAS CDMX</small></div>
         <Nav />
         <div className="spacer" />
         <div className="user">{email}</div>

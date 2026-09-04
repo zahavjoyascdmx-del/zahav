@@ -10,6 +10,7 @@ const links = [
   { href: "/stock", label: "Stock en Full" },
   { href: "/publicaciones", label: "Publicaciones" },
   { href: "/sync", label: "Sincronización" },
+  { href: "/config", label: "Configuración" },
 ];
 
 export function Nav() {

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 const str = (fd: FormData, k: string) => {
@@ -9,10 +10,9 @@ const str = (fd: FormData, k: string) => {
 };
 const num = (fd: FormData, k: string) => Number(String(fd.get(k) ?? "0").replace(/[^0-9.-]/g, "")) || 0;
 
-export async function crearVentaDirecta(fd: FormData) {
-  const supabase = await createClient();
+function camposVenta(fd: FormData) {
   const productId = str(fd, "product_id");
-  const { error } = await supabase.from("direct_sales").insert({
+  return {
     fecha: str(fd, "fecha") ?? undefined,
     canal: str(fd, "canal") ?? "directa",
     cliente: str(fd, "cliente") ?? "Sin nombre",
@@ -24,27 +24,55 @@ export async function crearVentaDirecta(fd: FormData) {
     color: str(fd, "color"),
     piedra: str(fd, "piedra"),
     precio_total: num(fd, "precio_total"),
-    pagado: num(fd, "pagado"),
     entrega_estimada: str(fd, "entrega_estimada"),
-    estado: num(fd, "pagado") > 0 ? "anticipo" : "cotizacion",
     notas: str(fd, "notas"),
-  });
-  if (error) throw new Error(error.message);
-  revalidatePath("/directas");
+  };
 }
 
-export async function registrarPago(fd: FormData) {
+export async function crearVentaDirecta(fd: FormData) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("direct_sales").insert(camposVenta(fd)).select("id").single();
+  if (error) throw new Error(error.message);
+  const anticipo = num(fd, "pagado");
+  if (anticipo > 0) {
+    await supabase.from("direct_sale_payments").insert({ sale_id: data.id, monto: anticipo, metodo: str(fd, "metodo") ?? "transferencia", nota: "Anticipo" });
+  }
+  revalidatePath("/directas");
+  redirect(`/directas/${data.id}`);
+}
+
+export async function actualizarVenta(fd: FormData) {
+  const id = Number(fd.get("id"));
+  const supabase = await createClient();
+  const { error } = await supabase.from("direct_sales").update(camposVenta(fd)).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/directas/${id}`);
+  revalidatePath("/directas");
+  redirect(`/directas/${id}?ok=guardado`);
+}
+
+export async function agregarPago(fd: FormData) {
   const id = Number(fd.get("id"));
   const monto = num(fd, "monto");
-  if (!id || !monto) return;
+  if (!id || monto <= 0) redirect(`/directas/${id}?error=monto`);
   const supabase = await createClient();
-  const { data } = await supabase.from("direct_sales").select("pagado,precio_total,estado").eq("id", id).single();
-  if (!data) return;
-  const pagado = Number(data.pagado) + monto;
-  const estado = data.estado === "cotizacion" ? "anticipo" : data.estado;
-  const { error } = await supabase.from("direct_sales").update({ pagado, estado }).eq("id", id);
+  const { error } = await supabase.from("direct_sale_payments").insert({
+    sale_id: id, monto, fecha: str(fd, "fecha") ?? undefined, metodo: str(fd, "metodo") ?? "transferencia", nota: str(fd, "nota"),
+  });
   if (error) throw new Error(error.message);
+  revalidatePath(`/directas/${id}`);
   revalidatePath("/directas");
+  redirect(`/directas/${id}?ok=pago`);
+}
+
+export async function eliminarPago(fd: FormData) {
+  const id = Number(fd.get("id"));
+  const pagoId = Number(fd.get("pago_id"));
+  const supabase = await createClient();
+  await supabase.from("direct_sale_payments").delete().eq("id", pagoId).eq("sale_id", id);
+  revalidatePath(`/directas/${id}`);
+  revalidatePath("/directas");
+  redirect(`/directas/${id}`);
 }
 
 export async function cambiarEstado(fd: FormData) {
@@ -54,5 +82,15 @@ export async function cambiarEstado(fd: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.from("direct_sales").update({ estado }).eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath(`/directas/${id}`);
   revalidatePath("/directas");
+  redirect(`/directas/${id}?ok=estado`);
+}
+
+export async function eliminarVenta(fd: FormData) {
+  const id = Number(fd.get("id"));
+  const supabase = await createClient();
+  await supabase.from("direct_sales").delete().eq("id", id);
+  revalidatePath("/directas");
+  redirect("/directas");
 }
