@@ -10,6 +10,7 @@ const links = [
   { href: "/ventas", label: "Ventas ML" },
   { href: "/directas", label: "Ventas directas" },
   { href: "/stock", label: "Stock en Full" },
+  { href: "/bodega", label: "Bodega" },
   { href: "/publicaciones", label: "Publicaciones" },
   { href: "/productos", label: "Catálogo" },
   { href: "/sync", label: "Sincronización" },

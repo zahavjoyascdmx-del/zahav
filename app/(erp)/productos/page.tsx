@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { mxn, num } from "@/lib/format";
 import { ORDEN_PROVEEDOR, ordenSeccion } from "@/lib/reporte";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 type Producto = {
   id: number; name: string; category: string | null; kilates: string | null; grams: number | null; cost_fixed: number | null; active: boolean;
-  sort_order: number; proveedor: string; insumo_pieza: number; stock_casa: number; stock_amazon: number;
+  sort_order: number; proveedor: string; insumo_pieza: number; stock_amazon: number;
 };
 type Oro = { proveedor: string; kilates: string; precio: number; mes: string };
 
@@ -31,7 +32,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
         <div>
           <h1>Catálogo</h1>
           <div className="muted">
-            Lo que en tu Excel eran columnas fijas: gramaje, costo de piedra o de pieza, proveedor (a quién le compras el oro), insumo por pieza y stock fuera de Full. Guarda cada fila que cambies.
+            Lo que en tu Excel eran columnas fijas: gramaje, costo de piedra o de pieza, proveedor (a quién le compras el oro), insumo por pieza y stock en Amazon. El stock en bodega por talla se captura en <Link href="/bodega">Bodega</Link>. Guarda cada fila que cambies.
           </div>
         </div>
       </div>
@@ -44,7 +45,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
             <thead>
               <tr>
                 <th>Producto</th><th>Categoría</th><th>Proveedor</th><th>Kilates</th><th className="num">Gramos</th><th className="num">Costo fijo</th><th className="num">Costo hoy</th>
-                <th className="num">Insumo/pza</th><th className="num">Stock casa</th><th className="num">Stock Amazon</th><th>Activo</th><th></th>
+                <th className="num">Insumo/pza</th><th className="num">Stock Amazon</th><th>Activo</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -69,7 +70,6 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
                     <td className="num"><input form={formId} name="cost_fixed" type="number" step="1" min="0" defaultValue={p.cost_fixed ?? 0} style={{ width: 90 }} title="Diamante/piedra o costo de la pieza completa (plata)" /></td>
                     <td className={`num ${costo <= 0 && p.active ? "zero" : ""}`}>{costo > 0 ? mxn(costo) : "falta"}{p.grams != null && precio ? <div className="muted" style={{ fontSize: 11 }}>oro {num(precio)}/g</div> : null}</td>
                     <td className="num"><input form={formId} name="insumo_pieza" type="number" step="1" min="0" defaultValue={p.insumo_pieza} style={{ width: 70 }} /></td>
-                    <td className="num"><input form={formId} name="stock_casa" type="number" step="1" min="0" defaultValue={p.stock_casa} style={{ width: 70 }} /></td>
                     <td className="num"><input form={formId} name="stock_amazon" type="number" step="1" min="0" defaultValue={p.stock_amazon} style={{ width: 70 }} /></td>
                     <td><input form={formId} name="active" type="checkbox" defaultChecked={p.active} /></td>
                     <td><button form={formId} className="btn small" type="submit">Guardar</button></td>

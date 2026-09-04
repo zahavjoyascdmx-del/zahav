@@ -119,13 +119,14 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
           <h2>Ventas que estás perdiendo por tallas agotadas <span className="muted">· aprox. {mxn(utilidadDiariaPerdida * 30)} de utilidad al mes</span></h2>
           <div className="tbl-wrap">
             <table className="compact">
-              <thead><tr><th>Producto</th><th className="num">Demanda en tallas agotadas</th><th className="num">Tallas agotadas</th><th className="num">Vende/día (real)</th><th className="num">Vendería/día</th><th className="num">Utilidad/pza</th><th className="num">Utilidad perdida/mes</th></tr></thead>
+              <thead><tr><th>Producto</th><th className="num">Demanda en tallas agotadas</th><th className="num">Tallas agotadas</th><th className="num">De esas, en bodega</th><th className="num">Vende/día (real)</th><th className="num">Vendería/día</th><th className="num">Utilidad/pza</th><th className="num">Utilidad perdida/mes</th></tr></thead>
               <tbody>
                 {perdiendo.map((x) => (
                   <tr key={x.fila.product_id}>
                     <td><Link href={`/ventas/${x.fila.product_id}`}>{x.fila.producto}</Link></td>
                     <td className="num">{pct(x.demanda_bloqueada)}</td>
                     <td className="num">{num(x.variantes.filter((v) => v.agotada).length)} de {num(x.variantes.filter((v) => v.en_full && v.activa).length)}</td>
+                    <td className="num">{x.variantes.some((v) => v.mandar_a_full) ? <Link href={`/bodega#p${x.fila.product_id}`}>{num(x.variantes.filter((v) => v.mandar_a_full).length)} tallas</Link> : "—"}</td>
                     <td className="num">{dec1(x.ritmo_obs)}</td>
                     <td className="num">{dec1(x.ritmo)}</td>
                     <td className="num">{mxn(x.utilidad_pieza)}</td>
@@ -198,7 +199,7 @@ function FilaPedido({ x, dias }: { x: ReturnType<typeof sugerirPedido>["producto
       </summary>
       <div className="tbl-wrap">
         <table className="compact">
-          <thead><tr><th>Color</th><th>Talla</th><th className="num">Vendidas {dias}d</th><th className="num">Días sin stock</th><th className="num">Vende/día</th><th className="num">En Full</th><th className="num">Tránsito</th><th className="num">Objetivo</th><th className="num">Pedir</th></tr></thead>
+          <thead><tr><th>Color</th><th>Talla</th><th className="num">Vendidas {dias}d</th><th className="num">Días sin stock</th><th className="num">Vende/día</th><th className="num">En Full</th><th className="num">Tránsito</th><th className="num">Bodega</th><th className="num">Objetivo</th><th className="num">Pedir</th></tr></thead>
           <tbody>
             {x.variantes.filter((v) => v.piezas > 0 || v.sugerido > 0 || v.agotada).map((v) => (
               <tr key={`${v.variant_id}-${v.color}-${v.talla}`} className={v.sugerido > 0 ? "" : "dim"}>
@@ -209,13 +210,14 @@ function FilaPedido({ x, dias }: { x: ReturnType<typeof sugerirPedido>["producto
                 <td className="num">{dec1(v.ritmo)}</td>
                 <td className={`num ${v.agotada ? "zero" : ""}`}>{v.en_full ? num(v.available ?? 0) : "—"}</td>
                 <td className="num">{v.en_full ? num(v.in_transit ?? 0) : "—"}</td>
+                <td className="num">{num(v.casa)}{v.mandar_a_full && <span className="tag warn" style={{ marginLeft: 6 }}>mandar a Full</span>}</td>
                 <td className="num">{num(v.objetivo)}</td>
                 <td className="num"><b>{v.sugerido > 0 ? num(v.sugerido) : ""}</b></td>
               </tr>
             ))}
           </tbody>
         </table>
-        {(f.stock_casa > 0 || f.stock_amazon > 0) && <p className="muted" style={{ padding: "8px 18px" }}>Ya cuentas con {num(f.stock_casa)} en casa y {num(f.stock_amazon)} en Amazon; están descontados del pedido. Reparte primero esas a las tallas agotadas.</p>}
+        {(f.stock_casa > 0 || f.stock_amazon > 0) && <p className="muted" style={{ padding: "8px 18px" }}>Ya cuentas con {num(f.stock_casa)} en bodega y {num(f.stock_amazon)} en Amazon; están descontados del pedido. Las tallas marcadas "mandar a Full" están agotadas en Full pero las tienes en <Link href={`/bodega#p${f.product_id}`}>Bodega</Link>.</p>}
       </div>
     </details>
   );

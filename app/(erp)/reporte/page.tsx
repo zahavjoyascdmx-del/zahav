@@ -107,7 +107,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
             <div className="kpi"><div className="label">Utilidad neta</div><div className="value">{mxn(t.utilidad_neta)}</div><div className="sub">{t.venta > 0 ? `${pct(t.utilidad_neta / t.venta)} de la venta` : ""}{t.gastos > 0 ? ` · ${pct(t.utilidad_neta / t.gastos)} sobre lo invertido` : ""}</div></div>
             <div className="kpi"><div className="label">Gastos fijos</div><div className="value">{mxn(totalFijos)}</div><div className="sub">{Object.entries(fijos).filter(([, v]) => Number(v) > 0).map(([k, v]) => `${k} ${mxn(v)}`).join(" · ") || "configúralos en Configuración"}</div></div>
             <div className="kpi"><div className="label">Utilidad final</div><div className={`value ${utilidadFinal < 0 ? "zero" : ""}`}>{mxn(utilidadFinal)}</div><div className="sub">neta − gastos fijos</div></div>
-            <div className="kpi"><div className="label">Inventario a costo</div><div className="value">{mxn(t.valor_stock)}</div><div className="sub">{num(t.stock_total)} piezas en Full, tránsito, casa y Amazon</div></div>
+            <div className="kpi"><div className="label">Inventario a costo</div><div className="value">{mxn(t.valor_stock)}</div><div className="sub">{num(t.stock_total)} piezas en Full, tránsito, bodega y Amazon</div></div>
           </div>
           {(t.ordenes_sin_pago > 0 || ventaSinProducto > 50 || sinCosto.length > 0) && (
             <ul className="muted" style={{ margin: "12px 0 0", paddingLeft: 18 }}>
@@ -131,7 +131,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
                     <th>Producto</th><th className="num">g</th><th className="num">Oro $/g</th><th className="num">Costo</th><th className="num">P. sugerido</th>
                     <th className="num">Vendidas</th><th className="num">Ventas</th><th className="num">Cargos</th><th className="num">Impuestos</th><th className="num">Recibiste</th><th className="num">Recibido/pza</th>
                     <th className="num">Gasto producto</th><th className="num">Utilidad bruta</th><th className="num">Insumos</th><th className="num">Utilidad neta</th><th className="num">% ganancia</th>
-                    <th className="num">Casa</th><th className="num">Full</th><th className="num">Amazon</th><th className="num">Total</th><th className="num">Valor stock</th>
+                    <th className="num">Bodega</th><th className="num">Full</th><th className="num">Amazon</th><th className="num">Total</th><th className="num">Valor stock</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -24,7 +24,6 @@ export async function actualizarProducto(fd: FormData) {
     cost_fixed: numOrNull(fd, "cost_fixed") ?? 0,
     proveedor,
     insumo_pieza: numOrNull(fd, "insumo_pieza") ?? 32,
-    stock_casa: Math.round(numOrNull(fd, "stock_casa") ?? 0),
     stock_amazon: Math.round(numOrNull(fd, "stock_amazon") ?? 0),
     active: fd.get("active") === "on",
   }).eq("id", id);

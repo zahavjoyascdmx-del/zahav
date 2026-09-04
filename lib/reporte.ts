@@ -111,11 +111,11 @@ export function mesAnterior(mes: string) {
 
 export type VarianteVenta = {
   product_id: number; variant_id: number | null; color: string; talla: string; piezas: number; venta: number; ultima_venta: string | null;
-  dias_con_venta: number; available: number | null; in_transit: number | null; en_full: boolean; activa: boolean; dias_snapshot: number; dias_agotado: number;
+  dias_con_venta: number; available: number | null; in_transit: number | null; en_full: boolean; activa: boolean; dias_snapshot: number; dias_agotado: number; casa: number;
 };
 
 export type VarianteSugerida = VarianteVenta & {
-  ritmo_obs: number; ritmo: number; dias_sin_stock: number; objetivo: number; faltan: number; sugerido: number; agotada: boolean;
+  ritmo_obs: number; ritmo: number; dias_sin_stock: number; objetivo: number; faltan: number; sugerido: number; agotada: boolean; mandar_a_full: boolean;
 };
 
 export type ProductoSugerido = {
@@ -163,17 +163,16 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
       const ritmoV = n(v.piezas) > 0 ? n(v.piezas) / conStock : 0;
       const agotada = v.en_full && v.activa && (v.available ?? 0) === 0;
       const objetivo = Math.round(ritmoV * p.cobertura); // menos de media pieza en el periodo objetivo: no se repone
-      const disponible = n(v.available) + n(v.in_transit);
+      const disponible = n(v.available) + n(v.in_transit) + n(v.casa); // lo de bodega también cubre la demanda
       const faltan = Math.max(0, objetivo - disponible);
-      return { ...v, ritmo_obs: n(v.piezas) / p.dias, ritmo: ritmoV, dias_sin_stock: sin, objetivo, faltan, sugerido: 0, agotada };
+      return { ...v, ritmo_obs: n(v.piezas) / p.dias, ritmo: ritmoV, dias_sin_stock: sin, objetivo, faltan, sugerido: 0, agotada, mandar_a_full: agotada && n(v.casa) > 0 };
     });
 
     const ritmo = calc.reduce((a, v) => a + v.ritmo, 0);
     const bloqueada = piezasPeriodo > 0 ? calc.filter((v) => v.agotada).reduce((a, v) => a + n(v.piezas), 0) / piezasPeriodo : 0;
-    const enFull = fila.stock_full + fila.stock_transito;
-    const stockTotal = enFull + fila.stock_casa + fila.stock_amazon;
+    const stockTotal = fila.stock_full + fila.stock_transito + fila.stock_casa + fila.stock_amazon;
     const objetivo = Math.round(ritmo * p.cobertura);
-    // lo que hay en casa/Amazon también cubre demanda: se descuenta del faltante total
+    // Amazon no se conoce por talla: se descuenta del faltante total del producto
     const faltanVariantes = calc.reduce((a, v) => a + v.faltan, 0);
     const faltan = Math.max(0, Math.min(faltanVariantes, objetivo - stockTotal));
     const utilidad_pieza = fila.piezas > 0 ? fila.utilidad_neta / fila.piezas : fila.precio_sugerido > 0 ? fila.precio_sugerido * 0.72 - fila.costo_unitario - n(fila.insumo_pieza) : 0;
