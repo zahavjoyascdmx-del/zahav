@@ -129,3 +129,12 @@ details.acc summary:hover { background: #f8faf8; }
 .acc-nums > span > b { font-size: 17px; font-weight: 800; }
 .acc-nums > span > small { display: block; font-size: 11px; color: var(--ink-soft); }
 details.acc .tbl-wrap { border-top: 1px solid var(--line); }
+
+/* ---- reporte / pedido / catálogo ---- */
+table.compact { font-size: 13px; }
+table.compact th, table.compact td { padding: 6px 9px; }
+tr.dim td { color: var(--ink-soft); }
+tr.total td { font-weight: 700; background: #f3f6f3; border-top: 2px solid var(--line); }
+.card.pendiente { border-color: #e6c98a; background: #fffaf0; }
+table.editable input, table.editable select { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; background: #fff; }
+table.editable td.num input { text-align: right; }

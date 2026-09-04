@@ -5,10 +5,13 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Resumen" },
+  { href: "/reporte", label: "Reporte mensual" },
+  { href: "/pedido", label: "Qué pedir" },
   { href: "/ventas", label: "Ventas ML" },
   { href: "/directas", label: "Ventas directas" },
   { href: "/stock", label: "Stock en Full" },
   { href: "/publicaciones", label: "Publicaciones" },
+  { href: "/productos", label: "Catálogo" },
   { href: "/sync", label: "Sincronización" },
   { href: "/config", label: "Configuración" },
 ];
