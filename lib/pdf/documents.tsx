@@ -1,6 +1,7 @@
 import React from "react";
-import { Document, Line, Page, Polygon, Polyline, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
-import { DIAMOND_POINTS, LETTER_LINES, LOGO_GOLD, LOGO_TAN, LOGO_VIEWBOX, Z_POINTS } from "@/lib/logo";
+import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+const LOGO_GOLD = "#B5975A";
+import { LOGO_ASPECT, LOGO_PNG_DATA_URI } from "@/lib/logo-data";
 import { detalleTexto, folio, folioRecibo, piezaTexto, type Negocio, type Pago, type Venta } from "@/lib/directas";
 
 const GOLD = LOGO_GOLD;
@@ -55,15 +56,7 @@ const s = StyleSheet.create({
 });
 
 function Logo({ width = 150 }: { width?: number }) {
-  return (
-    <Svg viewBox={LOGO_VIEWBOX} width={width} height={(width * 480) / 1020}>
-      <Polygon points={DIAMOND_POINTS} fill="none" stroke={LOGO_TAN} strokeWidth={34} />
-      <Polyline points={Z_POINTS} fill="none" stroke={GOLD} strokeWidth={40} />
-      {LETTER_LINES.map(([x1, y1, x2, y2], i) => (
-        <Line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={GOLD} strokeWidth={16} />
-      ))}
-    </Svg>
-  );
+  return <Image src={LOGO_PNG_DATA_URI} style={{ width, height: width / LOGO_ASPECT }} />;
 }
 
 function Header({ negocio, title, folioText, meta }: { negocio: Negocio; title: string; folioText: string; meta: string[] }) {
@@ -71,7 +64,7 @@ function Header({ negocio, title, folioText, meta }: { negocio: Negocio; title: 
     <>
       <View style={s.header}>
         <View>
-          <Logo width={150} />
+          <Logo width={165} />
           <Text style={s.brandName}>{negocio.nombre.toUpperCase()}</Text>
           <Text style={s.brandSub}>{[negocio.ciudad, negocio.instagram].filter(Boolean).join("  ·  ")}</Text>
         </View>

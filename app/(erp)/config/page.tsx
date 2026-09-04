@@ -41,7 +41,7 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
           <div style={{ background: "#fff", padding: 20, border: "1px solid var(--line)", borderRadius: 10, display: "inline-block" }}>
             <Logo width={320} />
           </div>
-          <p className="muted">Versión vectorial reconstruida del logotipo. Si quieres usar el archivo original, súbelo a tu Drive con el nombre "logo zahav" y lo cambio.</p>
+          <p className="muted">Logotipo oficial tomado de tu Drive (logo.jpeg). Para cambiarlo, sube una nueva imagen con "logo" en el nombre y avísame.</p>
         </div>
       </div>
     </>
