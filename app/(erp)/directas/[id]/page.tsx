@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { fechaCorta, mxn, todayCdmx } from "@/lib/format";
-import { CANALES, ESTADOS, METODOS, folio, folioRecibo, type Pago, type Venta } from "@/lib/directas";
+import { CANALES, ESTADOS, METODOS, folio, folioRecibo, piezaTexto, whatsappUrl, type Pago, type Venta } from "@/lib/directas";
+import { CopyLink } from "@/components/CopyLink";
 import { actualizarVenta, agregarPago, cambiarEstado, eliminarPago, eliminarVenta } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,10 @@ export default async function VentaPage({ params, searchParams }: { params: Prom
   const saldo = Number(v.precio_total) - Number(v.pagado);
   const hoy = todayCdmx();
   const cerrado = ["entregada", "cancelada"].includes(v.estado);
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  const linkPedido = `${origin}/compartir/pedido/${v.share_token}`;
+  const msgPedido = `Hola ${v.cliente}, te comparto ${v.estado === "cotizacion" ? "la cotización" : "el pedido"} ${folio(v.id)} de ${piezaTexto(v)}: ${linkPedido}`;
 
   return (
     <>
@@ -32,7 +38,9 @@ export default async function VentaPage({ params, searchParams }: { params: Prom
           <div className="muted">{v.cliente} · {fechaCorta(v.fecha)} · {v.canal}</div>
         </div>
         <div className="chips">
-          <a className="btn" href={`/directas/${v.id}/pdf`} target="_blank" rel="noreferrer">PDF del pedido</a>
+          <a className="btn" href={`/directas/${v.id}/pdf`} target="_blank" rel="noreferrer">Ver PDF</a>
+          <a className="btn secondary" href={whatsappUrl(v.telefono, msgPedido)} target="_blank" rel="noreferrer">Enviar por WhatsApp</a>
+          <CopyLink url={linkPedido} label="Copiar link para el cliente" />
         </div>
       </div>
 
@@ -67,9 +75,9 @@ export default async function VentaPage({ params, searchParams }: { params: Prom
           <h2>Pagos</h2>
           <div className="tbl-wrap">
             <table>
-              <thead><tr><th>Recibo</th><th>Fecha</th><th>Método</th><th className="num">Monto</th><th>Nota</th><th></th></tr></thead>
+              <thead><tr><th>Recibo</th><th>Fecha</th><th>Método</th><th className="num">Monto</th><th>Nota</th><th>Compartir</th><th></th></tr></thead>
               <tbody>
-                {lista.length === 0 && <tr><td colSpan={6} className="muted">Sin pagos todavía.</td></tr>}
+                {lista.length === 0 && <tr><td colSpan={7} className="muted">Sin pagos todavía.</td></tr>}
                 {lista.map((p) => (
                   <tr key={p.id}>
                     <td><a href={`/directas/${v.id}/recibo/${p.id}`} target="_blank" rel="noreferrer">{folioRecibo(p.id)}</a></td>
@@ -77,6 +85,12 @@ export default async function VentaPage({ params, searchParams }: { params: Prom
                     <td>{p.metodo}</td>
                     <td className="num">{mxn(p.monto)}</td>
                     <td className="muted" style={{ whiteSpace: "normal" }}>{p.nota}</td>
+                    <td>
+                      <div className="chips">
+                        <a className="chip" href={whatsappUrl(v.telefono, `Hola ${v.cliente}, te comparto el recibo ${folioRecibo(p.id)} de tu pago de ${mxn(p.monto)}: ${origin}/compartir/recibo/${p.share_token}`)} target="_blank" rel="noreferrer">WhatsApp</a>
+                        <CopyLink url={`${origin}/compartir/recibo/${p.share_token}`} label="Copiar link" small />
+                      </div>
+                    </td>
                     <td>
                       <form action={eliminarPago}>
                         <input type="hidden" name="id" value={v.id} />

@@ -17,7 +17,16 @@ export default async function ErpLayout({ children }: { children: ReactNode }) {
         <div className="user">{email}</div>
         <form action={signOut}><button type="submit">Salir</button></form>
       </aside>
-      <main className="main">{children}</main>
+      <div className="content">
+        <header className="topbar">
+          <div className="topbar-row">
+            <Logo width={110} />
+            <form action={signOut}><button type="submit" className="chip">Salir</button></form>
+          </div>
+          <nav className="topnav"><Nav /></nav>
+        </header>
+        <main className="main">{children}</main>
+      </div>
     </div>
   );
 }
