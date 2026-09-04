@@ -85,20 +85,21 @@ function refreshOnce() {
 }
 
 // deno-lint-ignore no-explicit-any
-async function meli(path: string, attempt = 0, extraHeaders: Record<string, string> = {}): Promise<any> {
+async function meli(path: string, attempt = 0, extraHeaders: Record<string, string> = {}, strict = false): Promise<any> {
   const token = await getToken();
-  const res = await fetch(API + path, {
+  const url = path.startsWith("http") ? path : API + path;
+  const res = await fetch(url, {
     headers: { Authorization: "Bearer " + token, Accept: "application/json", ...extraHeaders },
   });
   if (res.status === 401 && attempt === 0) {
     await refreshOnce();
-    return meli(path, 1, extraHeaders);
+    return meli(path, 1, extraHeaders, strict);
   }
   if ((res.status === 429 || res.status >= 500) && attempt < 3) {
     await sleep(800 * (attempt + 1));
-    return meli(path, attempt + 1, extraHeaders);
+    return meli(path, attempt + 1, extraHeaders, strict);
   }
-  if (res.status === 404 || res.status === 403) return null;
+  if ((res.status === 404 || res.status === 403) && !strict) return null;
   const text = await res.text();
   if (!res.ok) throw new Error(`MELI ${res.status} ${path}: ${text.slice(0, 300)}`);
   return text ? JSON.parse(text) : null;
@@ -382,7 +383,7 @@ async function syncPayments(stats: Json, errors: string[], limit: number) {
   const rows: Json[] = [];
   // deno-lint-ignore no-explicit-any
   await pool((pending ?? []) as any[], 5, async (p) => {
-    const pay = await meli(`/v1/payments/${p.payment_id}`);
+    const pay = await meli(`https://api.mercadopago.com/v1/payments/${p.payment_id}`, 0, {}, true);
     if (!pay) return;
     rows.push({
       payment_id: p.payment_id,
