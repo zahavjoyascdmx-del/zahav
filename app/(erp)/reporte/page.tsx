@@ -134,7 +134,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
           <h2>Resultado del mes</h2>
           <div className="kpi-row">
             <div className="kpi"><div className="label">Ventas</div><div className="value">{mxn(t.venta)}</div><div className="sub">{num(t.piezas)} piezas · {resumenMes ? `${num(resumenMes.canceladas)} canceladas fuera` : ""}</div></div>
-            <div className="kpi"><div className="label">Te depositaron</div><div className="value">{mxn(t.recibido)}</div><div className="sub">tras comisión, envíos, IVA/ISR y cupones</div></div>
+            <div className="kpi"><div className="label">Te depositaron</div><div className="value">{mxn(t.recibido)}</div><div className="sub">tras comisión, envíos, IVA/ISR y cupones{t.piezas_reventa > 0 ? ` · incluye ${num(t.piezas_reventa)} pzas en reventa (${mxn(t.venta_reventa)}) sin comisión ni retención` : ""}</div></div>
             <div className="kpi"><div className="label">Gasto en producto</div><div className="value">{mxn(t.gastos)}</div><div className="sub">oro × gramaje + piedra/pieza</div></div>
             <div className="kpi"><div className="label">Insumos</div><div className="value">{mxn(t.insumos)}</div><div className="sub">cajas y empaque</div></div>
             <div className="kpi"><div className="label">Publicidad</div><div className="value">{mxn(hayPublicidad ? pubTotal : publicidadManual)}</div><div className="sub">{hayPublicidad ? `Product Ads real, ${num(pubDias)} días · sin IVA · generó ${mxn(pubVentas)} en ventas` : "monto manual de Configuración (sin datos de Product Ads para este mes)"}</div></div>
@@ -166,7 +166,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
                 <thead>
                   <tr>
                     <th>Producto</th><th className="num">g</th><th className="num">Oro $/g</th><th className="num">Costo</th><th className="num">P. sugerido</th>
-                    <th className="num">Vendidas</th><th className="num">Ventas</th><th className="num">Cargos</th><th className="num">Impuestos</th><th className="num">Recibiste</th><th className="num">Recibido/pza</th>
+                    <th className="num">Vendidas</th><th className="num">Reventa</th><th className="num">Ventas</th><th className="num">Cargos</th><th className="num">Impuestos</th><th className="num">Recibiste</th><th className="num">Recibido/pza</th>
                     <th className="num">Gasto producto</th><th className="num">Utilidad bruta</th><th className="num">Insumos</th><th className="num">Publicidad</th><th className="num">Utilidad neta</th><th className="num">% ganancia</th>
                     <th className="num">Bodega</th><th className="num">Full</th><th className="num">Amazon</th><th className="num">Total</th><th className="num">Valor stock</th>
                   </tr>
@@ -180,6 +180,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
                       <td className={`num ${f.sin_costo ? "zero" : ""}`}>{f.sin_costo ? "falta" : mxn(f.costo_unitario)}</td>
                       <td className="num">{f.sin_costo ? "—" : mxn(f.precio_sugerido)}</td>
                       <td className="num"><b>{num(f.piezas)}</b></td>
+                      <td className="num">{Number(f.piezas_reventa) > 0 ? num(f.piezas_reventa) : "—"}</td>
                       <td className="num">{mxn(f.venta)}</td>
                       <td className="num">{mxn(Number(f.comision) + Number(f.envio) + Number(f.cupon))}</td>
                       <td className="num">{mxn(Number(f.ret_iva) + Number(f.ret_isr))}</td>
@@ -200,7 +201,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
                   ))}
                   <tr className="total">
                     <td>Total {titulo}</td><td></td><td></td><td></td><td></td>
-                    <td className="num">{num(st.piezas)}</td><td className="num">{mxn(st.venta)}</td><td className="num">{mxn(st.comision + st.envio + st.cupon)}</td><td className="num">{mxn(st.impuestos)}</td><td className="num">{mxn(st.recibido)}</td>
+                    <td className="num">{num(st.piezas)}</td><td className="num">{st.piezas_reventa > 0 ? num(st.piezas_reventa) : "—"}</td><td className="num">{mxn(st.venta)}</td><td className="num">{mxn(st.comision + st.envio + st.cupon)}</td><td className="num">{mxn(st.impuestos)}</td><td className="num">{mxn(st.recibido)}</td>
                     <td className="num">{st.piezas > 0 ? mxn(st.recibido / st.piezas) : "—"}</td>
                     <td className="num">{mxn(st.gastos)}</td><td className="num">{mxn(st.utilidad_bruta)}</td><td className="num">{mxn(st.insumos)}</td><td className="num">{mxn(st.publicidad)}</td><td className="num">{mxn(st.utilidad_neta)}</td>
                     <td className="num">{st.gastos > 0 ? `${dec1((st.utilidad_neta / st.gastos) * 100)}%` : "—"}</td>
@@ -257,7 +258,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
       </div>
 
       <p className="muted">
-        Cargos = comisión de Mercado Libre + envíos a tu cargo + cupones. Impuestos = retenciones de IVA e ISR que descuenta Mercado Pago. % ganancia = utilidad neta ÷ gasto en producto, como en tu hoja. La publicidad es el gasto real de Product Ads (sin IVA) de las publicaciones de cada producto; lo que te deposita Mercado Pago por venta no la incluye, así que no se descuenta dos veces.
+        Cargos = comisión de Mercado Libre + envíos a tu cargo + cupones. Impuestos = retenciones de IVA e ISR que descuenta Mercado Pago, tomadas de cada pago real (equivalen a 6.9% y 2.16% de la venta). Las ventas en modo reventa no llevan comisión ni retención y se muestran en su columna. Si una orden aún no tiene cargos reales, se estiman con esos porcentajes y se marca como estimada. % ganancia = utilidad neta ÷ gasto en producto, como en tu hoja. La publicidad es el gasto real de Product Ads (sin IVA) de las publicaciones de cada producto; lo que te deposita Mercado Pago por venta no la incluye, así que no se descuenta dos veces.
         Los meses anteriores usan el precio del oro que tenías en el Excel; puedes corregirlo arriba y el mes se recalcula.
       </p>
     </>

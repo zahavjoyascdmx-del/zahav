@@ -17,7 +17,7 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
     supabase.rpc("ventas_por_dia", { p_desde: desde, p_hasta: hoy }),
     supabase.rpc("ventas_resumen", { p_desde: desde, p_hasta: hoy }),
   ]);
-  const r = resumen.data?.[0] ?? { ordenes: 0, piezas: 0, venta: 0, comision: 0, envio: 0, canceladas: 0, ret_iva: 0, ret_isr: 0, cupon: 0, neto_recibido: 0, con_pago: 0 };
+  const r = resumen.data?.[0] ?? { ordenes: 0, piezas: 0, venta: 0, comision: 0, envio: 0, canceladas: 0, ret_iva: 0, ret_isr: 0, cupon: 0, neto_recibido: 0, con_pago: 0, reventa_ordenes: 0, reventa_piezas: 0, reventa_venta: 0, estimadas: 0 };
   const totalVenta = Number(r.venta) || 1;
 
   return (
@@ -44,7 +44,8 @@ export default async function VentasPage({ searchParams }: { searchParams: Promi
           <div className="kpi"><div className="label">Retención IVA</div><div className="value">{mxn(r.ret_iva)}</div></div>
           <div className="kpi"><div className="label">Retención ISR</div><div className="value">{mxn(r.ret_isr)}</div></div>
           <div className="kpi"><div className="label">Cupones</div><div className="value">{mxn(r.cupon)}</div></div>
-          <div className="kpi"><div className="label">Te depositaron</div><div className="value">{mxn(r.neto_recibido)}</div><div className="sub">{num(r.con_pago)} de {num(r.ordenes)} órdenes con cargos</div></div>
+          <div className="kpi"><div className="label">Te depositaron</div><div className="value">{mxn(r.neto_recibido)}</div><div className="sub">{num(r.con_pago)} de {num(r.ordenes)} órdenes con cargos reales{Number(r.estimadas) > 0 ? ` · ${num(r.estimadas)} estimadas` : ""}</div></div>
+          {Number(r.reventa_ordenes) > 0 && <div className="kpi"><div className="label">Reventa</div><div className="value">{num(r.reventa_piezas)}</div><div className="sub">piezas · {mxn(r.reventa_venta)} · sin comisión ni retenciones, precio con descuento</div></div>}
           <div className="kpi"><div className="label">Canceladas</div><div className="value">{num(r.canceladas)}</div></div>
         </div>
       </div>

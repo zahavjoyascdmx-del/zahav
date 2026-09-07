@@ -8,6 +8,7 @@ export type FilaReporte = {
   recibido: number; ordenes_sin_pago: number; dias_con_venta: number;
   stock_full: number; stock_transito: number; stock_casa: number; stock_amazon: number; variantes_activas: number; agotadas: number;
   dias_snapshot: number; pct_dias_agotado: number | null;
+  piezas_reventa?: number; venta_reventa?: number; ordenes_estimadas?: number;
   /** Gasto de Product Ads del mes atribuido al producto (se rellena desde publicidad_mes). */
   publicidad?: number;
 };
@@ -65,15 +66,17 @@ export function recalcularIndicadores(f: FilaCalculada): FilaCalculada {
 export type Totales = {
   piezas: number; venta: number; comision: number; envio: number; impuestos: number; cupon: number; recibido: number;
   gastos: number; insumos: number; publicidad: number; utilidad_bruta: number; utilidad_neta: number; valor_stock: number; stock_total: number; ordenes_sin_pago: number;
+  piezas_reventa: number; venta_reventa: number;
 };
 
 export function totales(filas: FilaCalculada[]): Totales {
-  const t: Totales = { piezas: 0, venta: 0, comision: 0, envio: 0, impuestos: 0, cupon: 0, recibido: 0, gastos: 0, insumos: 0, publicidad: 0, utilidad_bruta: 0, utilidad_neta: 0, valor_stock: 0, stock_total: 0, ordenes_sin_pago: 0 };
+  const t: Totales = { piezas: 0, venta: 0, comision: 0, envio: 0, impuestos: 0, cupon: 0, recibido: 0, gastos: 0, insumos: 0, publicidad: 0, utilidad_bruta: 0, utilidad_neta: 0, valor_stock: 0, stock_total: 0, ordenes_sin_pago: 0, piezas_reventa: 0, venta_reventa: 0 };
   for (const f of filas) {
     t.piezas += f.piezas; t.venta += n(f.venta); t.comision += n(f.comision); t.envio += n(f.envio);
     t.impuestos += n(f.ret_iva) + n(f.ret_isr); t.cupon += n(f.cupon); t.recibido += f.recibido;
     t.gastos += f.gastos; t.insumos += f.insumos; t.publicidad += f.publicidad; t.utilidad_bruta += f.utilidad_bruta; t.utilidad_neta += f.utilidad_neta;
     t.valor_stock += f.valor_stock; t.stock_total += f.stock_total; t.ordenes_sin_pago += n(f.ordenes_sin_pago);
+    t.piezas_reventa += n(f.piezas_reventa); t.venta_reventa += n(f.venta_reventa);
   }
   return t;
 }
