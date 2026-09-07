@@ -16,17 +16,16 @@ export default async function Home() {
     { label: "Últimos 30 días", desde: addDays(hoy, -29), hasta: hoy },
     { label: "Mes actual", desde: hoy.slice(0, 8) + "01", hasta: hoy },
   ];
-  const [res, dias, prods, sync, stock] = await Promise.all([
+  const [res, dias, prods, sync, agotadasRes] = await Promise.all([
     Promise.all(rangos.map((r) => supabase.rpc("ventas_resumen", { p_desde: r.desde, p_hasta: r.hasta }))),
     supabase.rpc("ventas_por_dia", { p_desde: addDays(hoy, -13), p_hasta: hoy }),
     supabase.rpc("ventas_por_producto", { p_desde: addDays(hoy, -29), p_hasta: hoy }),
-    supabase.from("sync_runs").select("*").order("id", { ascending: false }).limit(1).maybeSingle(),
-    supabase.rpc("stock_full_actual"),
+    supabase.from("sync_runs").select("started_at,finished_at").order("id", { ascending: false }).limit(1).maybeSingle(),
+    supabase.rpc("agotadas_full"),
   ]);
 
   const resumenes = res.map((r) => (r.data?.[0] ?? { ordenes: 0, piezas: 0, venta: 0, comision: 0, envio: 0, canceladas: 0, ret_iva: 0, ret_isr: 0, cupon: 0, neto_recibido: 0, con_pago: 0 }) as Resumen);
-  const stockRows = (stock.data ?? []) as { available: number; item_status: string; producto: string | null }[];
-  const agotadas = stockRows.filter((s) => s.available === 0 && s.item_status === "active").length;
+  const agotadas = Number(agotadasRes.data ?? 0);
   const maxVenta = Math.max(1, ...((dias.data ?? []) as { venta: number }[]).map((d) => Number(d.venta)));
 
   return (
