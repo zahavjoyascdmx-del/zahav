@@ -82,13 +82,13 @@ export function totales(filas: FilaCalculada[]): Totales {
 }
 
 /** Orden de las secciones, como en el Excel: 10k, 14k, plata, diamante, Bogos. */
-export const ORDEN_PROVEEDOR = ["Argollas", "Anillos", "Bogos", "Diamante", "Plata"];
+export const ORDEN_PROVEEDOR = ["Argollas", "Dinasti", "Bogos", "Fabricación propia", "China"];
 export function ordenSeccion(proveedor: string, kilates: string | null) {
   const i = ORDEN_PROVEEDOR.indexOf(proveedor);
   return (i < 0 ? 99 : i) * 10 + (kilates === "10k" ? 0 : kilates === "14k" ? 1 : 2);
 }
 export const tituloSeccion = (proveedor: string, kilates: string | null) =>
-  proveedor === "Plata" ? "Plata / moissanita" : kilates ? `${proveedor} · oro ${kilates}` : proveedor;
+  proveedor === "China" ? "Plata / moissanita (China)" : kilates ? `${proveedor} · oro ${kilates}` : proveedor;
 
 export type Meses = { mes: string; label: string }[];
 /** Últimos `cuantos` meses (YYYY-MM-01) hasta el mes de `hoy`, más reciente primero. */
