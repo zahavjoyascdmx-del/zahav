@@ -34,3 +34,11 @@ La sección **Videos** convierte una foto de una publicación (o una foto subida
 
 Piezas involucradas: `supabase/migrations/20260908_videos_higgsfield.sql` (tabla `videos`, bucket, RPCs `generar_video`,
 `revisar_videos`, `higgsfield_set_key`, cron), `supabase/functions/higgsfield-video/index.ts`, `app/(erp)/videos/` y `lib/videos.ts`.
+
+### Armar Reel para Instagram
+
+En **Videos → Armar Reel** el clip de Higgsfield se convierte en un Reel de 15 s (1080×1920) con logo, título, ficha de la pieza,
+"¿Sabías que?" y llamada a la acción. Las capas se dibujan con `@napi-rs/canvas` (`lib/reel/render.ts`) y se montan con `ffmpeg-static`
+(`lib/reel/ffmpeg.ts`) en la ruta `app/(erp)/videos/[id]/reel` (POST arma el video, GET devuelve una vista previa PNG). El resultado se
+guarda en `reels/` del bucket `videos`. El banco de datos curiosos está en `lib/reel/sabias.ts`; la ficha se sugiere desde la publicación
+de ML y el catálogo (`lib/reel/ficha.ts`). Las fuentes (Playfair Display y Montserrat, licencia OFL) viven en `lib/reel/fonts/`.

@@ -109,3 +109,11 @@ select cron.schedule(
   '*/2 * * * *',
   $cron$select private.call_edge('higgsfield-video', '{"action":"poll"}'::jsonb) where exists (select 1 from public.videos where status in ('pendiente', 'en_cola', 'generando'))$cron$
 );
+
+-- ---------------------------------------------------------------- Reel armado para Instagram (clip + ficha + ¿Sabías que? + CTA)
+alter table public.videos
+  add column if not exists reel_url text,
+  add column if not exists reel_spec jsonb,
+  add column if not exists reel_error text,
+  add column if not exists reel_at timestamptz,
+  add column if not exists caption text;

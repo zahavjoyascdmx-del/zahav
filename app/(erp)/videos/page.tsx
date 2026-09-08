@@ -74,6 +74,7 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
                       <div className="muted" style={{ fontSize: 12 }}>{MODELOS.find((m) => m.value === r.model)?.label ?? r.model} · {r.aspect_ratio} · {r.duration}s</div>
                       <details><summary className="muted" style={{ cursor: "pointer", fontSize: 12 }}>Prompt</summary><div className="muted" style={{ fontSize: 12 }}>{r.prompt}</div></details>
                       {r.error && <div className="error" style={{ marginTop: 6, fontSize: 12, whiteSpace: "normal" }}>{r.error}</div>}
+                      {r.reel_url && <div style={{ marginTop: 6 }}><a href={r.reel_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Reel armado ({fechaHora(r.reel_at)}) · descargar</a></div>}
                     </td>
                     <td>{DESTINOS.find((d) => d.value === r.destino)?.label.split(" (")[0] ?? r.destino}</td>
                     <td>
@@ -85,7 +86,8 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
                       <div className="chips">
                         {r.status === "listo" && r.video_url && (
                           <>
-                            <a className="chip" href={r.video_url} download={`zahav-video-${r.id}.mp4`} target="_blank" rel="noreferrer">Descargar</a>
+                            <Link className="chip active" href={`/videos/${r.id}`}>{r.reel_url ? "Reel listo · editar" : "Armar Reel para IG"}</Link>
+                            <a className="chip" href={r.video_url} download={`zahav-video-${r.id}.mp4`} target="_blank" rel="noreferrer">Descargar clip</a>
                             <CopyLink url={r.video_url} label="Copiar enlace" small />
                           </>
                         )}

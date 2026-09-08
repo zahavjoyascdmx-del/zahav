@@ -4,6 +4,7 @@ export type VideoRow = {
   id: number; item_id: string | null; product_id: number | null; destino: "ig" | "ml"; titulo: string; image_url: string; prompt: string;
   model: string; aspect_ratio: string; duration: number; status: "pendiente" | "en_cola" | "generando" | "listo" | "error" | "nsfw";
   request_id: string | null; video_url: string | null; error: string | null; attempts: number; created_at: string; finished_at: string | null;
+  reel_url: string | null; reel_spec: Record<string, unknown> | null; reel_error: string | null; reel_at: string | null; caption: string | null;
 };
 
 export const DESTINOS: { value: "ig" | "ml"; label: string; hint: string; aspect: string }[] = [
@@ -27,6 +28,10 @@ export const ASPECTOS: { value: string; label: string }[] = [
 
 /** Prompts en inglés (Higgsfield responde mejor así) pensados para joyería de oro. */
 export const PROMPTS: { label: string; prompt: string }[] = [
+  {
+    label: "Realista · producto en estudio",
+    prompt: "Photorealistic luxury jewelry commercial. The exact gold ring from the photo stays perfectly in focus while the camera performs a slow, smooth 20-degree orbit; soft warm key light with a large softbox glides across the polished gold surface producing gentle, realistic specular highlights and tiny sparkles on the stones; deep black velvet background with subtle bokeh; shallow depth of field; macro lens; 4k detail; keep the ring shape, color and proportions identical to the photo; no hands, no text, no extra objects, no deformation.",
+  },
   {
     label: "Giro lento con brillo",
     prompt: "Luxury jewelry product video. The gold piece slowly rotates on a dark velvet surface, soft warm studio light glides across the metal creating elegant sparkles, shallow depth of field, cinematic, high detail, no text.",
