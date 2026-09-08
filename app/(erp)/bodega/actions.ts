@@ -46,3 +46,23 @@ export async function agregarTalla(fd: FormData) {
   revalidar();
   redirect(`/bodega?ok=${productId}#p${productId}`);
 }
+
+/** Deshace (o vuelve a aplicar) el descuento automático de un envío a Full. */
+export async function ignorarEnvioFull(fd: FormData) {
+  const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
+  const inventory_id = String(fd.get("inventory_id") ?? "");
+  const ignorar = fd.get("ignorar") === "1";
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bodega_ignorar_envio", { p_fecha: fecha, p_inventory_id: inventory_id, p_ignorar: ignorar });
+  if (error) throw new Error(error.message);
+  revalidar();
+  redirect(`/bodega/envios-full`);
+}
+
+/** Fuerza la sincronización de stock Full + operaciones + descuento de bodega. */
+export async function aplicarEnviosFull() {
+  const supabase = await createClient();
+  await supabase.rpc("run_sync", { p_kind: "stock" });
+  revalidar();
+  redirect(`/bodega/envios-full?ok=1`);
+}

@@ -48,7 +48,7 @@ export default async function BodegaPage({ searchParams }: { searchParams: Promi
       <div className="page-head">
         <div>
           <h1>Bodega</h1>
-          <div className="muted">Stock fuera de Full, por talla y color. Cambia los números y guarda cada producto; el reporte y el pedido sugerido lo toman en cuenta al instante. Full se actualiza solo (foto del {snap.data ? fechaCorta(snap.data.snapshot_date) : "—"}). <Link href="/bodega/movimientos">Ver historial de movimientos</Link></div>
+          <div className="muted">Stock fuera de Full, por talla y color. Cambia los números y guarda cada producto; el reporte y el pedido sugerido lo toman en cuenta al instante. Full se actualiza solo (foto del {snap.data ? fechaCorta(snap.data.snapshot_date) : "—"}). <Link href="/bodega/movimientos">Ver historial de movimientos</Link> · <Link href="/bodega/envios-full">Envíos a Full (descuento automático)</Link> · <a href="/bodega/excel">Descargar Excel de existencias</a></div>
         </div>
         <form method="get" className="inline">
           <input name="q" placeholder="Buscar producto…" defaultValue={q ?? ""} style={{ width: 200 }} />

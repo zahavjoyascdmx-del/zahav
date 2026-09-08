@@ -256,6 +256,45 @@ async function syncStock(stats: Json, errors: string[]) {
   stats.stock = rows.length;
 }
 
+
+// ---------------------------------------------------------------- operaciones de stock Full (entregas de transferencias) y descuento de bodega
+/** Consulta operaciones solo de los inventarios con movimiento en tránsito (hoy o ayer) y aplica el descuento de bodega. */
+async function syncOperations(stats: Json, errors: string[]) {
+  const today = cdmxDate();
+  const { data: dias } = await sb.from("meli_stock_snapshots").select("snapshot_date").lt("snapshot_date", today)
+    .order("snapshot_date", { ascending: false }).limit(1);
+  const prev = dias?.[0]?.snapshot_date as string | undefined;
+  const { data: hoy } = await sb.from("meli_stock_snapshots").select("inventory_id,in_transit").eq("snapshot_date", today);
+  const { data: ayer } = prev ? await sb.from("meli_stock_snapshots").select("inventory_id,in_transit").eq("snapshot_date", prev) : { data: [] };
+  const ayerMap = new Map<string, number>((ayer ?? []).map((r) => [r.inventory_id as string, Number(r.in_transit)]));
+  const candidatos = (hoy ?? []).filter((r) => Number(r.in_transit) > 0 || (ayerMap.get(r.inventory_id as string) ?? 0) > 0)
+    .map((r) => r.inventory_id as string);
+  const uid = creds!.meli_user_id;
+  const from = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+  const rows: Json[] = [];
+  await pool(candidatos, 4, async (inv) => {
+    const r = await meli(`/stock/fulfillment/operations/search?seller_id=${uid}&inventory_id=${inv}&date_from=${from}&date_to=${to}`);
+    for (const op of r?.results ?? []) {
+      const refs: { type: string; value: string }[] = op.external_references ?? [];
+      rows.push({
+        id: op.id, inventory_id: inv, type: op.type, date_created: op.date_created,
+        fecha: cdmxDate(new Date(op.date_created)),
+        qty_available: op.detail?.available_quantity ?? 0,
+        inbound_id: refs.find((x) => x.type === "inbound_id")?.value ?? null,
+        shipment_id: refs.find((x) => x.type === "shipment_id")?.value ?? null,
+        raw: op, synced_at: new Date().toISOString(),
+      });
+    }
+  }, errors);
+  await upsert("meli_stock_operations", rows);
+  stats.operations = rows.length;
+  stats.operations_inventarios = candidatos.length;
+  const { data: res, error } = await sb.rpc("bodega_aplicar_envios_full", { p_fecha: today });
+  if (error) errors.push("bodega_aplicar_envios_full: " + error.message);
+  else stats.bodega = res;
+}
+
 // ---------------------------------------------------------------- órdenes
 // deno-lint-ignore no-explicit-any
 async function upsertOrders(results: any[]) {
@@ -608,7 +647,7 @@ Deno.serve(async (req: Request) => {
     await loadCreds();
     const has = (...k: string[]) => k.includes(kind);
     if (has("items", "daily", "full")) await syncItems(stats, errors);
-    if (has("stock", "incremental", "daily", "full")) await syncStock(stats, errors);
+    if (has("stock", "incremental", "daily", "full")) { await syncStock(stats, errors); await syncOperations(stats, errors); }
     if (has("orders", "incremental", "full")) await syncOrdersIncremental(stats, Number(body.days ?? 60));
     if (has("backfill")) await syncOrdersBackfill(stats, body.from);
     if (has("shipments", "incremental", "backfill", "full")) await syncShipments(stats, errors, Number(body.limit ?? 150));
