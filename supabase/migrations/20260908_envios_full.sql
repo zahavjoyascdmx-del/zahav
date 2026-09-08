@@ -81,18 +81,21 @@ begin
     with hoy as (select inventory_id, item_id, variation_id, in_transit from public.meli_stock_snapshots where snapshot_date = v_fecha),
     ayer as (select inventory_id, in_transit from public.meli_stock_snapshots where snapshot_date = v_prev),
     ent as (
-      select inventory_id, sum(qty_available) as entregado from public.meli_stock_operations
-      where fecha = v_fecha and type in ('TRANSFER_DELIVERY', 'INBOUND_RECEPTION') group by inventory_id
+      select inventory_id,
+        sum(qty_available) filter (where type in ('TRANSFER_DELIVERY', 'INBOUND_RECEPTION')) as entregado,
+        -- TRANSFER_RESERVATION: unidades que ya estaban en Full pasan a tránsito (movimiento interno), no salen de la bodega
+        sum(-qty_available) filter (where type = 'TRANSFER_RESERVATION') as interno
+      from public.meli_stock_operations where fecha = v_fecha group by inventory_id
     )
     select h.inventory_id,
       coalesce(mv.variant_id, mi.variant_id) as variant_id,
-      greatest(0, h.in_transit - coalesce(a.in_transit, 0) + coalesce(e.entregado, 0)) as enviado
+      greatest(0, h.in_transit - coalesce(a.in_transit, 0) + coalesce(e.entregado, 0) - coalesce(e.interno, 0)) as enviado
     from hoy h
     left join ayer a on a.inventory_id = h.inventory_id
     left join ent e on e.inventory_id = h.inventory_id
     left join public.meli_variations mv on mv.inventory_id = h.inventory_id
     left join public.meli_items mi on mi.item_id = h.item_id and mi.variation_id is null
-    where greatest(0, h.in_transit - coalesce(a.in_transit, 0) + coalesce(e.entregado, 0)) > 0
+    where greatest(0, h.in_transit - coalesce(a.in_transit, 0) + coalesce(e.entregado, 0) - coalesce(e.interno, 0)) > 0
        or exists (select 1 from public.bodega_envios_full b where b.fecha = v_fecha and b.inventory_id = h.inventory_id)
   loop
     insert into public.bodega_envios_full (fecha, inventory_id, variant_id, enviado)
