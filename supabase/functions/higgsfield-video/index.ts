@@ -54,7 +54,8 @@ async function hf(path: string, init: RequestInit = {}) {
 }
 
 function explain(status: number, body: Json, text: string) {
-  const detail = (body.detail ?? body.message ?? body.error ?? text).toString().slice(0, 400);
+  const raw = body.detail ?? body.message ?? body.error ?? text;
+  const detail = (typeof raw === "string" ? raw : JSON.stringify(raw)).slice(0, 600);
   if (status === 401 || status === 403) return `Higgsfield rechazó la clave (${status}). Revisa API key y secret en Configuración. ${detail}`;
   if (status === 402) return `Sin créditos en Higgsfield (402). Recarga en cloud.higgsfield.ai. ${detail}`;
   if (status === 422 || status === 400) return `Higgsfield no aceptó la petición (${status}): ${detail}`;
