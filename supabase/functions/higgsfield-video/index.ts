@@ -1,5 +1,5 @@
 // Edge Function: genera videos con Higgsfield (imagen → video) y guarda el MP4 en Storage.
-// Se invoca con POST { action: "generate", id } | { action: "poll" } | { action: "test" } y el header x-sync-key (clave de private.sync_secrets).
+// Se invoca con POST { action: "generate", id } | { action: "poll" } | { action: "test" } | { action: "probe", paths } y el header x-sync-key (clave de private.sync_secrets).
 // Clave de Higgsfield: private.sync_secrets['higgsfield_key'] con formato "API_KEY:API_SECRET" (de https://cloud.higgsfield.ai).
 import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 
@@ -215,6 +215,16 @@ Deno.serve(async (req: Request) => {
       const r = await hf("/v1/motions");
       const lista = Array.isArray(r.body) ? r.body : (r.body as Json).items ?? (r.body as Json).motions ?? [];
       result = { ok: r.ok, status: r.status, motions: Array.isArray(lista) ? lista.length : null, muestra: r.text.slice(0, 300) };
+    } else if (action === "probe") {
+      // Diagnóstico: consulta rutas de la API (sin créditos) y devuelve estado + inicio del cuerpo.
+      const out: Json[] = [];
+      for (const p of (body.paths ?? []) as { path: string; method?: string; body?: Json }[]) {
+        try {
+          const r = await hf(p.path, { method: p.method ?? "GET", body: p.method === "POST" ? JSON.stringify(p.body ?? {}) : undefined });
+          out.push({ path: p.path, status: r.status, body: r.text.slice(0, Number(body.max ?? 700)) });
+        } catch (e) { out.push({ path: p.path, error: String(e).slice(0, 200) }); }
+      }
+      result = { probe: out };
     } else {
       return json({ error: "Acción desconocida: " + action }, 400);
     }
