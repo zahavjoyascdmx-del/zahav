@@ -56,8 +56,8 @@ async function hf(path: string, init: RequestInit = {}) {
 function explain(status: number, body: Json, text: string) {
   const raw = body.detail ?? body.message ?? body.error ?? text;
   const detail = (typeof raw === "string" ? raw : JSON.stringify(raw)).slice(0, 600);
+  if (status === 402 || /not enough credits|insufficient/i.test(detail)) return `Sin créditos en la cuenta de Higgsfield (${status}). Compra créditos en cloud.higgsfield.ai → Billing (son distintos de los del app higgsfield.ai). ${detail}`;
   if (status === 401 || status === 403) return `Higgsfield rechazó la clave (${status}). Revisa API key y secret en Configuración. ${detail}`;
-  if (status === 402) return `Sin créditos en Higgsfield (402). Recarga en cloud.higgsfield.ai. ${detail}`;
   if (status === 422 || status === 400) return `Higgsfield no aceptó la petición (${status}): ${detail}`;
   return `Higgsfield ${status}: ${detail}`;
 }
@@ -68,7 +68,7 @@ async function generate(id: number): Promise<Json> {
   if (error || !v) throw new Error("Video no encontrado: " + (error?.message ?? id));
   const video = v as Video;
   const input: Json = {
-    model: video.model || "dop-turbo",
+    model: video.model || "dop-turbo", // dop-lite | dop-turbo | dop-preview
     prompt: video.prompt,
     input_images: [{ type: "image_url", image_url: video.image_url }],
     aspect_ratio: video.aspect_ratio || "9:16",
@@ -78,10 +78,10 @@ async function generate(id: number): Promise<Json> {
   if (video.motion_id) input.motions = [{ id: video.motion_id, strength: 0.8 }];
   if (video.seed != null) input.seed = video.seed;
 
-  let r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify(input) });
-  // Algunas versiones de la API esperan el cuerpo envuelto en { params }.
-  if (!r.ok && (r.status === 400 || r.status === 422) && /params|field required/i.test(r.text)) {
-    r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify({ params: input }) });
+  // La API espera el cuerpo envuelto en { params } (verificado); si algún día cambia, se reintenta sin envoltura.
+  let r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify({ params: input }) });
+  if (!r.ok && (r.status === 400 || r.status === 422) && /"loc":\["body","params"\]/.test(r.text)) {
+    r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify(input) });
   }
   if (!r.ok) {
     const msg = explain(r.status, r.body, r.text);

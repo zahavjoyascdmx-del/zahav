@@ -100,7 +100,7 @@ export function VideoForm({ items, disabled }: { items: ItemFotos[]; disabled: b
             </label>
             <label>
               Calidad
-              <select name="model" defaultValue="dop-turbo">
+              <select name="model" defaultValue="dop-preview">
                 {MODELOS.map((m) => <option key={m.value} value={m.value}>{m.label} · {m.hint}</option>)}
               </select>
             </label>

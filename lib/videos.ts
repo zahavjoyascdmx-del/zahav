@@ -12,9 +12,10 @@ export const DESTINOS: { value: "ig" | "ml"; label: string; hint: string; aspect
   { value: "ml", label: "Mercado Libre (Clip de la publicación)", hint: "Vertical 9:16. Súbelo en la publicación → Clips, o compártelo en el chat de ML.", aspect: "9:16" },
 ];
 
+// Modelos que acepta la API de Higgsfield (DoP): dop-lite, dop-turbo y dop-preview.
 export const MODELOS: { value: string; label: string; hint: string }[] = [
+  { value: "dop-preview", label: "Máxima calidad", hint: "El más realista; tarda más y cuesta más créditos." },
   { value: "dop-turbo", label: "Turbo", hint: "Rápido y económico. Ideal para probar." },
-  { value: "dop-standard", label: "Estándar", hint: "Mejor calidad, tarda más y cuesta más créditos." },
   { value: "dop-lite", label: "Lite", hint: "El más barato." },
 ];
 
