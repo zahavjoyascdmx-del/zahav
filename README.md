@@ -42,3 +42,14 @@ En **Videos → Armar Reel** el clip de Higgsfield se convierte en un Reel de 15
 (`lib/reel/ffmpeg.ts`) en la ruta `app/(erp)/videos/[id]/reel` (POST arma el video, GET devuelve una vista previa PNG). El resultado se
 guarda en `reels/` del bucket `videos`. El banco de datos curiosos está en `lib/reel/sabias.ts`; la ficha se sugiere desde la publicación
 de ML y el catálogo (`lib/reel/ficha.ts`). Las fuentes (Playfair Display y Montserrat, licencia OFL) viven en `lib/reel/fonts/`.
+
+## Rendimiento y datos derivados
+
+- La fecha CDMX de cada orden (`meli_orders.fecha`), los cargos de cada pago (`meli_payments.ret_iva`, `ret_isr`, `fee_meli`,
+  `fee_mp`, `fee_envio`, `cupon`) y los ids de pagos aprobados (`meli_orders.payment_ids`) son **columnas generadas**:
+  Postgres las calcula al sincronizar. La sincronización no debe enviarlas.
+- Las políticas RLS usan `(select public.is_allowed())` para evaluarse una vez por consulta. Al crear una tabla nueva,
+  escribe la política así (o vuelve a correr el bloque de la migración `20260914_rendimiento_2`).
+- Cada línea de venta se asigna a su variante/producto al insertarse (trigger `order_item_variante`) y un cron horario
+  (`catalog-map-hourly`, minuto 20) ejecuta `map_catalog()` para publicaciones y variaciones nuevas.
+- `reporte_mensual_varios(date[])` y `publicidad_meses(date[])` devuelven varios meses en una sola llamada.

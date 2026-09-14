@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaHora } from "@/lib/format";
+import { AutoRefresh } from "@/app/(erp)/videos/AutoRefresh";
 import { remap, runSync } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,10 @@ const KINDS: [string, string][] = [
 export default async function SyncPage() {
   const supabase = await createClient();
   const { data } = await supabase.from("sync_runs").select("*").order("id", { ascending: false }).limit(40);
+  const corriendo = (data ?? []).some((r) => r.status === "running");
   return (
     <>
+      <AutoRefresh activo={corriendo} cadaMs={5_000} />
       <div className="page-head">
         <div>
           <h1>Sincronización</h1>
@@ -36,7 +39,7 @@ export default async function SyncPage() {
           ))}
           <form action={remap}><button className="btn secondary" type="submit">Re-mapear catálogo</button></form>
         </div>
-        <p className="muted" style={{ marginBottom: 0 }}>La corrida aparece abajo en unos segundos; recarga la página para ver el resultado.</p>
+        <p className="muted" style={{ marginBottom: 0 }}>La corrida aparece abajo en unos segundos y la tabla se actualiza sola mientras esté en proceso.</p>
       </div>
       <div className="card tight">
         <div className="tbl-wrap">
