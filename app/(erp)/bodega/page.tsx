@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, fechaCorta, mxn, num, todayCdmx } from "@/lib/format";
 import { ordenSeccion } from "@/lib/reporte";
+import { ColorTabs } from "@/components/ColorTabs";
 import { agregarTalla, guardarBodega } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,13 @@ type Var = { product_id: number; variant_id: number; color: string; talla: strin
 type Oro = { proveedor: string; kilates: string; precio: number };
 
 const tallaNum = (t: string) => { const n = parseFloat(t.replace(/[^0-9.]/g, "")); return Number.isFinite(n) ? n : 999; };
+/** Agrupa las tallas de un producto por color (Amarillo, Blanco, Rosa…), cada grupo ordenado por talla. */
+function porColor(lista: Var[]): [string, Var[]][] {
+  const m = new Map<string, Var[]>();
+  for (const v of lista) m.set(v.color, [...(m.get(v.color) ?? []), v]);
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, vs]) => [c, vs.sort((a, b) => tallaNum(a.talla) - tallaNum(b.talla))]);
+}
+const suma = (vs: Var[], f: (v: Var) => number) => vs.reduce((a, v) => a + f(v), 0);
 
 export default async function BodegaPage({ searchParams }: { searchParams: Promise<{ ok?: string; q?: string }> }) {
   const { ok, q } = await searchParams;
@@ -103,24 +111,39 @@ export default async function BodegaPage({ searchParams }: { searchParams: Promi
               </span>
             </summary>
             <form id={formId} action={guardarBodega}><input type="hidden" name="product_id" value={p.id} /></form>
-            <div className="tbl-wrap">
-              <table className="compact editable">
-                <thead><tr><th>Color</th><th>Talla</th><th className="num">En Full</th><th className="num">Tránsito</th><th className="num">Vendidas 90d</th><th className="num">En bodega</th></tr></thead>
-                <tbody>
-                  {lista.map((v) => (
-                    <tr key={v.variant_id}>
-                      <td>{v.color || "—"}</td>
-                      <td>{v.talla || "—"}</td>
-                      <td className={`num ${v.en_full && v.activa && (v.available ?? 0) === 0 ? "zero" : ""}`}>{v.en_full ? num(v.available ?? 0) : "—"}</td>
-                      <td className="num">{v.en_full ? num(v.in_transit ?? 0) : "—"}</td>
-                      <td className="num">{num(v.piezas)}</td>
-                      <td className="num"><input form={formId} name={`casa__${v.variant_id}`} type="number" min="0" step="1" defaultValue={v.casa} style={{ width: 70 }} /></td>
-                    </tr>
-                  ))}
-                  {lista.length === 0 && <tr><td colSpan={6} className="muted">Sin tallas registradas. Agrega una abajo.</td></tr>}
-                </tbody>
-              </table>
-            </div>
+            <ColorTabs
+              tabs={porColor(lista).map(([color, filas]) => ({
+                key: color || "sin-color",
+                label: color || "Sin color",
+                badge: <small>{num(suma(filas, (v) => Number(v.casa)))} bodega · {num(suma(filas, (v) => Number(v.available ?? 0)))} Full</small>,
+                content: (
+                  <div className="tbl-wrap">
+                    <table className="compact editable">
+                      <thead><tr><th>Talla</th><th className="num">En Full</th><th className="num">Tránsito</th><th className="num">Vendidas 90d</th><th className="num">En bodega</th></tr></thead>
+                      <tbody>
+                        {filas.map((v) => (
+                          <tr key={v.variant_id}>
+                            <td><b>{v.talla || "—"}</b></td>
+                            <td className={`num strong ${v.en_full && v.activa && (v.available ?? 0) === 0 ? "zero" : ""}`}>{v.en_full ? num(v.available ?? 0) : "—"}</td>
+                            <td className="num">{v.en_full ? num(v.in_transit ?? 0) : "—"}</td>
+                            <td className="num">{num(v.piezas)}</td>
+                            <td className="num"><input form={formId} className="strong" name={`casa__${v.variant_id}`} type="number" min="0" step="1" defaultValue={v.casa} style={{ width: 70 }} /></td>
+                          </tr>
+                        ))}
+                        <tr className="total">
+                          <td>Total {color || ""}</td>
+                          <td className="num">{num(suma(filas, (v) => Number(v.available ?? 0)))}</td>
+                          <td className="num">{num(suma(filas, (v) => Number(v.in_transit ?? 0)))}</td>
+                          <td className="num">{num(suma(filas, (v) => Number(v.piezas)))}</td>
+                          <td className="num">{num(suma(filas, (v) => Number(v.casa)))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ),
+              }))}
+            />
+            {lista.length === 0 && <p className="muted" style={{ padding: "0 16px 10px", margin: 0 }}>Sin tallas registradas. Agrega una abajo.</p>}
             <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap", padding: "10px 16px 14px", borderTop: "1px solid var(--line)" }}>
               <label className="inline muted">En Amazon (total)<input form={formId} name="amazon" type="number" min="0" step="1" defaultValue={p.stock_amazon} style={{ width: 70 }} /></label>
               <button form={formId} className="btn small" type="submit">Guardar {p.name}</button>

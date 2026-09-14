@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaCorta, mxn, num } from "@/lib/format";
+import { ColorTabs } from "@/components/ColorTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,12 @@ type Oro = { proveedor: string; kilates: string; precio: number; mes: string };
 const tallaNum = (t: string | null) => { const n = parseFloat((t ?? "").replace(/[^0-9.]/g, "")); return Number.isFinite(n) ? n : 999; };
 const sortVar = <T extends { color: string | null; talla: string | null }>(a: T, b: T) =>
   (a.color ?? "").localeCompare(b.color ?? "") || tallaNum(a.talla) - tallaNum(b.talla);
+/** Agrupa las variantes de una publicación por color, cada grupo ordenado por talla. */
+function porColor<T extends { color: string | null; talla: string | null }>(list: T[]): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  for (const r of list) { const k = r.color ?? ""; m.set(k, [...(m.get(k) ?? []), r]); }
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, rs]) => [c, rs.sort((a, b) => tallaNum(a.talla) - tallaNum(b.talla))]);
+}
 
 function Estado({ s }: { s: string | null }) {
   return <span className={`tag ${s === "active" ? "ok" : s === "paused" ? "warn" : "neutral"}`}>{s === "active" ? "activa" : s === "paused" ? "pausada" : s ?? "—"}</span>;
@@ -119,22 +126,40 @@ export default async function StockPage() {
               <Estado s={g.status} />
             </span>
           </summary>
-          <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>Color</th><th>Talla</th><th className="num">Disponible</th><th className="num">En tránsito</th><th className="num">No disponible</th></tr></thead>
-              <tbody>
-                {g.list.map((r) => (
-                  <tr key={r.inventory_id}>
-                    <td>{r.color || "—"}</td>
-                    <td>{r.talla || "—"}</td>
-                    <td className={`num ${r.available === 0 ? "zero" : ""}`}>{num(r.available)}</td>
-                    <td className="num">{num(r.in_transit)}</td>
-                    <td className="num">{num(r.not_available)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ColorTabs
+            tabs={porColor(g.list).map(([color, filas]) => {
+              const disp = filas.reduce((a, r) => a + r.available, 0);
+              const agot = filas.filter((r) => r.available === 0).length;
+              return {
+                key: color || "sin-color",
+                label: color || "Sin color",
+                badge: <small>{num(disp)} disp.{agot > 0 ? ` · ${agot} en 0` : ""}</small>,
+                content: (
+                  <div className="tbl-wrap">
+                    <table>
+                      <thead><tr><th>Talla</th><th className="num">Disponible</th><th className="num">En tránsito</th><th className="num">No disponible</th></tr></thead>
+                      <tbody>
+                        {filas.map((r) => (
+                          <tr key={r.inventory_id}>
+                            <td><b>{r.talla || "—"}</b></td>
+                            <td className={`num strong ${r.available === 0 ? "zero" : ""}`}>{num(r.available)}</td>
+                            <td className="num">{num(r.in_transit)}</td>
+                            <td className="num">{num(r.not_available)}</td>
+                          </tr>
+                        ))}
+                        <tr className="total">
+                          <td>Total {color || ""}</td>
+                          <td className="num">{num(disp)}</td>
+                          <td className="num">{num(filas.reduce((a, r) => a + r.in_transit, 0))}</td>
+                          <td className="num">{num(filas.reduce((a, r) => a + r.not_available, 0))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ),
+              };
+            })}
+          />
         </details>
       ))}
 
@@ -156,7 +181,7 @@ export default async function StockPage() {
                     <thead><tr><th>Color</th><th>Talla</th><th className="num">Publicado</th></tr></thead>
                     <tbody>
                       {i.vars.map((v, k) => (
-                        <tr key={k}><td>{v.color || "—"}</td><td>{v.talla || "—"}</td><td className={`num ${v.available_quantity === 0 ? "zero" : ""}`}>{num(v.available_quantity)}</td></tr>
+                        <tr key={k}><td>{v.color || "—"}</td><td><b>{v.talla || "—"}</b></td><td className={`num strong ${v.available_quantity === 0 ? "zero" : ""}`}>{num(v.available_quantity)}</td></tr>
                       ))}
                     </tbody>
                   </table>
