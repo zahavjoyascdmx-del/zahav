@@ -46,3 +46,56 @@ export async function agregarTalla(fd: FormData) {
   revalidar();
   redirect(`/bodega?ok=${productId}#p${productId}`);
 }
+
+/** Deshace (o vuelve a aplicar) el descuento automático de un envío a Full. */
+export async function ignorarEnvioFull(fd: FormData) {
+  const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
+  const inventory_id = String(fd.get("inventory_id") ?? "");
+  const ignorar = fd.get("ignorar") === "1";
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bodega_ignorar_envio", { p_fecha: fecha, p_inventory_id: inventory_id, p_ignorar: ignorar });
+  if (error) throw new Error(error.message);
+  revalidar();
+  redirect(`/bodega/envios-full`);
+}
+
+/** Fuerza la sincronización de stock Full + operaciones + descuento de bodega. */
+export async function aplicarEnviosFull() {
+  const supabase = await createClient();
+  await supabase.rpc("run_sync", { p_kind: "stock" });
+  revalidar();
+  redirect(`/bodega/envios-full?ok=1`);
+}
+
+/** Importa el CSV de detalle de una colecta (Envíos a Full de Mercado Libre) y descuenta la bodega. */
+export async function importarInbound(fd: FormData) {
+  const file = fd.get("archivo");
+  if (!(file instanceof File) || file.size === 0) redirect("/bodega/envios-full?error=Selecciona el archivo CSV");
+  const { parseInboundCsv } = await import("@/lib/inbound-csv");
+  let csv;
+  try {
+    csv = parseInboundCsv(await file.text());
+  } catch (e) {
+    redirect(`/bodega/envios-full?error=${encodeURIComponent(String((e as Error).message))}`);
+  }
+  const descontar = fd.get("descontar") === "on";
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bodega_importar_inbound", {
+    p_meta: { inbound_id: csv.inbound_id, estado: csv.estado, fecha_recepcion: csv.fecha_recepcion },
+    p_rows: csv.rows,
+    p_descontar: descontar,
+  });
+  if (error) redirect(`/bodega/envios-full?error=${encodeURIComponent(error.message)}`);
+  revalidar();
+  const r = data as { inbound_id: string; descontado: boolean; piezas_descontadas: number; ya_estaba: boolean; sin_mapear: number };
+  redirect(`/bodega/envios-full?ok=${encodeURIComponent(`Colecta ${r.inbound_id}: ${r.ya_estaba ? "ya estaba descontada, solo se actualizó el detalle" : r.descontado ? `${r.piezas_descontadas} piezas descontadas de bodega` : "registrada sin descontar"}${r.sin_mapear ? ` · ${r.sin_mapear} tallas sin mapear` : ""}`)}#inbounds`);
+}
+
+export async function deshacerInbound(fd: FormData) {
+  const id = String(fd.get("inbound_id") ?? "");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bodega_deshacer_inbound", { p_inbound_id: id });
+  if (error) redirect(`/bodega/envios-full?error=${encodeURIComponent(error.message)}`);
+  revalidar();
+  redirect(`/bodega/envios-full?ok=${encodeURIComponent(`Colecta ${id}: piezas devueltas a bodega`)}#inbounds`);
+}
