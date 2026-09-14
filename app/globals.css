@@ -155,4 +155,13 @@ table.editable td.num input { text-align: right; }
   .kpi-row > div { min-width: 100px; }
   .form-grid .wide { grid-column: span 2; }
   h1 { font-size: 21px; }
+  /* Filtros (meses, rangos) en una sola línea deslizable en vez de apilarse */
+  .page-head .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .page-head .chips::-webkit-scrollbar { display: none; }
+  .page-head .chips .chip { flex: 0 0 auto; }
+  /* Tablas anchas: la primera columna (producto, fecha) se queda fija al deslizar */
+  .tbl-wrap th:first-child, .tbl-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); box-shadow: 1px 0 0 var(--line); }
+  .tbl-wrap th:first-child { background: #f8faf8; }
+  .tbl-wrap tr.total td:first-child { background: #f3f6f3; }
+  .tbl-wrap tbody tr:hover td:first-child { background: #f8faf8; }
 }

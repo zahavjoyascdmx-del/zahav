@@ -16,15 +16,26 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
   const desde = addDays(hoy, -(dias - 1));
   const meses = listaMeses(hoy, Math.ceil(dias / 30) + 1);
   const supabase = await createClient();
+  const listaMesesIso = meses.map((m) => m.mes);
   const [reps, pubs, vars, cfg, porMes] = await Promise.all([
-    Promise.all(meses.map((m) => supabase.rpc("reporte_mensual", { p_mes: m.mes }))),
-    Promise.all(meses.map((m) => supabase.rpc("publicidad_mes", { p_mes: m.mes }))),
+    supabase.rpc("reporte_mensual_varios", { p_meses: listaMesesIso }),
+    supabase.rpc("publicidad_meses", { p_meses: listaMesesIso }),
     supabase.rpc("ventas_variantes_todas", { p_desde: desde, p_hasta: hoy }),
     supabase.from("settings").select("key,value").in("key", ["presupuesto", "lead_time_days", "buffer_days", "gastos_fijos"]),
     supabase.rpc("ventas_por_mes", { p_meses: 4 }),
   ]);
-  for (const r of reps) if (r.error) throw new Error(r.error.message);
+  if (reps.error) throw new Error(reps.error.message);
   if (vars.error) throw new Error(vars.error.message);
+  // Filas del reporte y publicidad agrupadas por mes (una sola llamada a la base por cada conjunto)
+  const repPorMes = new Map<string, FilaReporte[]>();
+  for (const r of (reps.data ?? []) as (FilaReporte & { mes: string })[]) repPorMes.set(r.mes, [...(repPorMes.get(r.mes) ?? []), r]);
+  const pubPorMes = new Map<string, Map<number, number>>();
+  for (const x of (pubs.data ?? []) as { mes: string; product_id: number | null; cost: number }[]) {
+    if (x.product_id == null) continue;
+    const m = pubPorMes.get(x.mes) ?? new Map<number, number>();
+    m.set(x.product_id, Number(x.cost));
+    pubPorMes.set(x.mes, m);
+  }
 
   const setting = (k: string) => (cfg.data ?? []).find((r) => r.key === k)?.value;
   const presuCfg = (setting("presupuesto") ?? {}) as { pct_recibido?: number; fijo?: number };
@@ -43,14 +54,13 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
 
   // Fila por producto: costo y stock del mes actual, ventas y utilidad acumuladas del periodo (cada mes con su precio de oro)
   const base = new Map<number, FilaCalculada>();
-  for (const r of (reps[0].data ?? []) as FilaReporte[]) {
+  for (const r of repPorMes.get(meses[0].mes) ?? []) {
     const f = calcularFila(r, meses[0].mes);
     base.set(f.product_id, { ...f, piezas: 0, venta: 0, comision: 0, envio: 0, ret_iva: 0, ret_isr: 0, cupon: 0, recibido: 0, gastos: 0, insumos: 0, publicidad: 0, utilidad_bruta: 0, utilidad_neta: 0, dias_con_venta: 0 });
   }
-  reps.forEach((rep, i) => {
-    const pub = new Map<number, number>();
-    for (const x of (pubs[i].data ?? []) as { product_id: number | null; cost: number }[]) if (x.product_id != null) pub.set(x.product_id, Number(x.cost));
-    for (const r of (rep.data ?? []) as FilaReporte[]) {
+  meses.forEach((m, i) => {
+    const pub = pubPorMes.get(m.mes) ?? new Map<number, number>();
+    for (const r of repPorMes.get(m.mes) ?? []) {
       const f = calcularFila({ ...r, publicidad: pub.get(r.product_id) ?? 0 }, meses[i].mes);
       const b = base.get(f.product_id);
       if (!b) continue;

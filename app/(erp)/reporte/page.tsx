@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { dec1, mxn, num, pct, todayCdmx } from "@/lib/format";
+import { addDays, dec1, mxn, num, pct, todayCdmx } from "@/lib/format";
 import { calcularFila, listaMeses, mesAnterior, mesSiguiente, nombreMes, ordenSeccion, tituloSeccion, totales, type FilaCalculada, type FilaReporte } from "@/lib/reporte";
 import { agregarGasto, borrarGasto, guardarOro } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type Oro = { mes: string; proveedor: string; kilates: string; precio: number };
-type MesResumen = { mes: string; ordenes: number; piezas: number; venta: number; neto_recibido: number; canceladas: number };
+type MesResumen = { ordenes: number; piezas: number; venta: number; neto_recibido: number; canceladas: number };
 type Pub = { product_id: number | null; cost: number; clicks: number; prints: number; units: number; total_amount: number; dias: number };
 type CargoML = { detail_sub_type: string | null; concepto: string | null; amount: number; n: number };
 type Gasto = { id: number; mes: string; concepto: string; monto: number; nota: string | null };
@@ -24,7 +24,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
     supabase.rpc("reporte_mensual", { p_mes: mes }),
     supabase.from("gold_prices").select("mes,proveedor,kilates,precio").in("mes", [mes, anterior]),
     supabase.from("settings").select("key,value").in("key", ["gastos_fijos"]),
-    supabase.rpc("ventas_por_mes", { p_meses: 13 }),
+    supabase.rpc("ventas_resumen", { p_desde: mes, p_hasta: addDays(mesSiguiente(mes), -1) }),
     supabase.rpc("publicidad_mes", { p_mes: mes }),
     supabase.rpc("cargos_ml_mes", { p_mes: mes }),
     supabase.from("gastos_mensuales").select("*").eq("mes", mes).order("id"),
@@ -63,7 +63,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
   const fijos: Record<string, number> = { contabilidad: Number(fijosCfg.contabilidad) || 0, intereses: Number(fijosCfg.intereses) || 0, ...(publicidadManual ? { publicidad: publicidadManual } : {}) };
   const totalFijos = Object.values(fijos).reduce((a, v) => a + v, 0);
   const utilidadFinal = t.utilidad_neta + dirUtilidad - pubSinProducto - otrosCargos - totalFijos - totalGastosManuales;
-  const resumenMes = ((porMes.data ?? []) as MesResumen[]).find((m) => m.mes === mes);
+  const resumenMes = ((porMes.data ?? []) as MesResumen[])[0];
   const ventaSinProducto = resumenMes ? Number(resumenMes.venta) - t.venta : 0;
 
   // Precio del oro: combinaciones proveedor × kilates que tienen productos con gramaje
