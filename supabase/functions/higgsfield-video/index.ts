@@ -218,9 +218,9 @@ Deno.serve(async (req: Request) => {
     } else if (action === "probe") {
       // Diagnóstico: consulta rutas de la API (sin créditos) y devuelve estado + inicio del cuerpo.
       const out: Json[] = [];
-      for (const p of (body.paths ?? []) as { path: string; method?: string; body?: Json }[]) {
+      for (const p of (body.paths ?? []) as { path: string; method?: string; body?: Json; headers?: Record<string, string> }[]) {
         try {
-          const r = await hf(p.path, { method: p.method ?? "GET", body: p.method === "POST" ? JSON.stringify(p.body ?? {}) : undefined });
+          const r = await hf(p.path, { method: p.method ?? "GET", body: p.method === "POST" ? JSON.stringify(p.body ?? {}) : undefined, headers: p.headers ?? {} });
           out.push({ path: p.path, status: r.status, body: r.text.slice(0, Number(body.max ?? 700)) });
         } catch (e) { out.push({ path: p.path, error: String(e).slice(0, 200) }); }
       }
