@@ -3,13 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import type { Negocio } from "@/lib/directas";
 import { guardarNegocio } from "./actions";
+import { guardarHiggsfieldKey } from "@/app/(erp)/videos/actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function ConfigPage({ searchParams }: { searchParams: Promise<{ ok?: string }> }) {
-  const { ok } = await searchParams;
+export default async function ConfigPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  const { ok, error } = await searchParams;
   const supabase = await createClient();
-  const { data } = await supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days"]);
+  const [{ data }, hk] = await Promise.all([
+    supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days"]),
+    supabase.rpc("higgsfield_has_key"),
+  ]);
+  const hasHiggsfield = hk.data === true;
   const get = (k: string) => (data ?? []).find((r) => r.key === k)?.value;
   const negocio = (get("negocio") ?? {}) as Partial<Negocio>;
   const fijos = (get("gastos_fijos") ?? {}) as Record<string, number>;
@@ -23,6 +28,7 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
         </div>
       </div>
       {ok && <p className="notice" style={{ background: "var(--calm-bg)", color: "var(--calm)" }}>Guardado.</p>}
+      {error && <p className="error">{error}</p>}
       <form action={guardarNegocio}>
         <div className="grid grid-2">
           <div className="card">
@@ -56,6 +62,19 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
       </form>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Higgsfield (videos con IA) {hasHiggsfield ? <span className="tag ok">clave guardada</span> : <span className="tag warn">sin clave</span>}</h2>
+        <p className="muted">
+          Para generar videos en <Link href="/videos">Videos</Link> se necesita una clave de API de Higgsfield. Créala en{" "}
+          <a href="https://cloud.higgsfield.ai" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>cloud.higgsfield.ai</a> → API keys y pégala aquí como <code>API_KEY:API_SECRET</code>.
+          Se guarda cifrada del lado del servidor y no viaja al navegador. Cada video descuenta créditos de esa cuenta.
+        </p>
+        <form action={guardarHiggsfieldKey} className="inline" style={{ flexWrap: "wrap" }}>
+          <input name="higgsfield_key" type="password" autoComplete="off" placeholder={hasHiggsfield ? "•••••••• (pega una nueva para reemplazarla)" : "API_KEY:API_SECRET"} style={{ width: 360, maxWidth: "100%" }} />
+          <button className="btn" type="submit">Guardar clave</button>
+          {hasHiggsfield && <span className="muted">Para quitarla, guarda el campo vacío.</span>}
+        </form>
+      </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>Logo en los documentos</h2>
         <div style={{ background: "#fff", padding: 20, border: "1px solid var(--line)", borderRadius: 10, display: "inline-block" }}>
