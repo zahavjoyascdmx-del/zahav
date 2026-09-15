@@ -56,7 +56,7 @@ async function hf(path: string, init: RequestInit = {}) {
 function explain(status: number, body: Json, text: string) {
   const raw = body.detail ?? body.message ?? body.error ?? text;
   const detail = (typeof raw === "string" ? raw : JSON.stringify(raw)).slice(0, 600);
-  if (status === 402 || /not enough credits|insufficient/i.test(detail)) return `Sin créditos en la cuenta de Higgsfield (${status}). Compra créditos en cloud.higgsfield.ai → Billing (son distintos de los del app higgsfield.ai). ${detail}`;
+  if (status === 402 || /not[_ ]enough[_ ]credits|insufficient/i.test(detail)) return `Sin créditos en la cuenta de Higgsfield (${status}). Compra créditos en cloud.higgsfield.ai → Billing (son distintos de los del app higgsfield.ai). ${detail}`;
   if (status === 401 || status === 403) return `Higgsfield rechazó la clave (${status}). Revisa API key y secret en Configuración. ${detail}`;
   if (status === 422 || status === 400) return `Higgsfield no aceptó la petición (${status}): ${detail}`;
   return `Higgsfield ${status}: ${detail}`;
