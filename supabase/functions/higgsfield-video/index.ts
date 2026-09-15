@@ -1,5 +1,5 @@
 // Edge Function: genera videos con Higgsfield (imagen → video) y guarda el MP4 en Storage.
-// Se invoca con POST { action: "generate", id } | { action: "poll" } | { action: "test" } | { action: "probe", paths } y el header x-sync-key (clave de private.sync_secrets).
+// Se invoca con POST { action: "generate", id } | { action: "poll" } | { action: "test" } | { action: "probe", paths } | { action: "image", id } | { action: "fetch", url } y el header x-sync-key (clave de private.sync_secrets).
 // Clave de Higgsfield: private.sync_secrets['higgsfield_key'] con formato "API_KEY:API_SECRET" (de https://cloud.higgsfield.ai).
 import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 
@@ -193,7 +193,118 @@ async function poll(): Promise<Json> {
       if (ageMin > TIMEOUT_MIN) await sb.from("videos").update({ status: "error", error: String(e).slice(0, 400), updated_at: now() }).eq("id", v.id);
     }
   }
-  return { revisados: out.length, detalle: out };
+  const imgs = await pollImages();
+  return { revisados: out.length + imgs.length, detalle: [...out, ...imgs] };
+}
+
+// ---------------------------------------------------------------- imágenes (GPT Image: edición de una foto real)
+type Imagen = {
+  id: number; titulo: string; image_url: string; prompt: string; model: string; quality: string; aspect_ratio: string | null; n: number;
+  status: string; request_id: string | null; status_url: string | null; attempts: number; updated_at: string;
+};
+
+// Modelos de imagen verificados en la API: openai/gpt-image-2/edit, openai/gpt-image-1.5/edit (prompt, image_urls[], quality low|medium|high, aspect_ratio 1:1|3:2|2:3),
+// openai/gpt-image-2 y openai/gpt-image-1.5 (texto a imagen), higgsfield-ai/soul/v2/standard y higgsfield-ai/soul/reference (texto a imagen).
+async function generateImage(id: number): Promise<Json> {
+  const { data: v, error } = await sb.from("imagenes").select("*").eq("id", id).maybeSingle();
+  if (error || !v) throw new Error("Imagen no encontrada: " + (error?.message ?? id));
+  const im = v as Imagen;
+  const model = im.model || "openai/gpt-image-2/edit";
+  const body: Json = { prompt: im.prompt, quality: im.quality || "high" };
+  if (im.aspect_ratio) body.aspect_ratio = im.aspect_ratio;
+  if (/\/edit$/.test(model)) body.image_urls = [im.image_url];
+  const r = await hf("/" + model.replace(/^\//, ""), { method: "POST", body: JSON.stringify(body) });
+  if (!r.ok) {
+    const msg = explain(r.status, r.body, r.text);
+    await sb.from("imagenes").update({ status: "error", error: msg, attempts: im.attempts + 1, updated_at: now() }).eq("id", id);
+    return { id, ok: false, error: msg };
+  }
+  const requestId = String(r.body.request_id ?? r.body.id ?? "");
+  const statusUrl = r.body.status_url ? String(r.body.status_url) : null;
+  if (!requestId) {
+    const msg = "Higgsfield respondió sin identificador de petición: " + r.text.slice(0, 300);
+    await sb.from("imagenes").update({ status: "error", error: msg, attempts: im.attempts + 1, updated_at: now() }).eq("id", id);
+    return { id, ok: false, error: msg };
+  }
+  await sb.from("imagenes").update({ status: "en_cola", request_id: requestId, status_url: statusUrl, error: null, attempts: im.attempts + 1, updated_at: now() }).eq("id", id);
+  return { id, ok: true, request_id: requestId };
+}
+
+function pickImageUrls(body: Json): string[] {
+  const b = body as Record<string, unknown>;
+  const out: string[] = [];
+  const images = b.images as Array<Record<string, unknown>> | undefined;
+  for (const i of images ?? []) if (i?.url) out.push(String(i.url));
+  const image = b.image as Record<string, unknown> | undefined;
+  if (image?.url) out.push(String(image.url));
+  const jobs = b.jobs as Array<Record<string, unknown>> | undefined;
+  for (const j of jobs ?? []) {
+    const raw = (j.results as Record<string, Record<string, unknown>> | undefined)?.raw;
+    if (raw?.url) out.push(String(raw.url));
+  }
+  return out;
+}
+
+async function saveImageToStorage(id: number, sourceUrl: string, idx: number): Promise<string> {
+  const res = await fetch(sourceUrl);
+  if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const type = res.headers.get("content-type")?.split(";")[0] || "image/png";
+  const ext = type.includes("jpeg") ? "jpg" : type.includes("webp") ? "webp" : "png";
+  const path = `imagenes/${id}-${Date.now()}-${idx}.${ext}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, bytes, { contentType: type, upsert: true });
+  if (error) throw new Error("No se pudo guardar en Storage: " + error.message);
+  return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+async function pollImages(): Promise<Json[]> {
+  const { data, error } = await sb.from("imagenes").select("*").in("status", ["pendiente", "en_cola", "generando"]).order("id");
+  if (error) throw new Error(error.message);
+  const out: Json[] = [];
+  for (const im of (data ?? []) as Imagen[]) {
+    if (timeLeft() < 15_000) break;
+    const ageMin = (Date.now() - new Date(im.updated_at).getTime()) / 60_000;
+    try {
+      if (!im.request_id) {
+        if (ageMin > 3) {
+          if (im.attempts < 2) out.push(await generateImage(im.id));
+          else await sb.from("imagenes").update({ status: "error", error: "No se pudo enviar la petición a Higgsfield.", updated_at: now() }).eq("id", im.id);
+        }
+        continue;
+      }
+      const r = await hf(im.status_url ?? `/requests/${im.request_id}/status`);
+      if (!r.ok) {
+        if (ageMin > TIMEOUT_MIN) await sb.from("imagenes").update({ status: "error", error: explain(r.status, r.body, r.text), updated_at: now() }).eq("id", im.id);
+        out.push({ imagen: im.id, status: r.status, error: r.text.slice(0, 200) });
+        continue;
+      }
+      const st = pickStatus(r.body);
+      if (st === "completed") {
+        const srcs = pickImageUrls(r.body);
+        if (!srcs.length) throw new Error("Terminó pero no trae URL de imagen: " + r.text.slice(0, 300));
+        const urls: string[] = [];
+        for (let i = 0; i < srcs.length; i++) urls.push(await saveImageToStorage(im.id, srcs[i], i));
+        await sb.from("imagenes").update({ status: "listo", source_urls: srcs, result_urls: urls, error: null, finished_at: now(), updated_at: now() }).eq("id", im.id);
+        out.push({ imagen: im.id, status: "listo", n: urls.length });
+      } else if (st === "failed" || st === "canceled" || st === "cancelled") {
+        const detail = String((r.body as Json).error ?? (r.body as Json).detail ?? "").slice(0, 300);
+        await sb.from("imagenes").update({ status: "error", error: "Higgsfield no pudo generar la imagen." + (detail ? " " + detail : ""), finished_at: now(), updated_at: now() }).eq("id", im.id);
+        out.push({ imagen: im.id, status: "error" });
+      } else if (st === "nsfw") {
+        await sb.from("imagenes").update({ status: "nsfw", error: "Higgsfield rechazó la imagen o el texto por su filtro de contenido.", finished_at: now(), updated_at: now() }).eq("id", im.id);
+        out.push({ imagen: im.id, status: "nsfw" });
+      } else {
+        const nuevo = st === "in_progress" ? "generando" : "en_cola";
+        if (ageMin > TIMEOUT_MIN) await sb.from("imagenes").update({ status: "error", error: `Sin respuesta de Higgsfield después de ${TIMEOUT_MIN} minutos. Reintenta.`, updated_at: now() }).eq("id", im.id);
+        else if (nuevo !== im.status) await sb.from("imagenes").update({ status: nuevo }).eq("id", im.id);
+        out.push({ imagen: im.id, status: nuevo });
+      }
+    } catch (e) {
+      out.push({ imagen: im.id, error: String(e).slice(0, 300) });
+      if (ageMin > TIMEOUT_MIN) await sb.from("imagenes").update({ status: "error", error: String(e).slice(0, 400), updated_at: now() }).eq("id", im.id);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- entrada
@@ -210,6 +321,17 @@ Deno.serve(async (req: Request) => {
       result = await generate(id);
     } else if (action === "poll") {
       result = await poll();
+    } else if (action === "image") {
+      const id = Number(body.id);
+      if (!id) return json({ error: "Falta id" }, 400);
+      result = await generateImage(id);
+    } else if (action === "fetch") {
+      // Devuelve un archivo (imagen) en base64 para revisarlo desde fuera; máximo ~6 MB.
+      const res = await fetch(String(body.url));
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (buf.length > 6_000_000) return json({ error: "Archivo demasiado grande", bytes: buf.length }, 413);
+      let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      result = { status: res.status, type: res.headers.get("content-type"), bytes: buf.length, base64: btoa(bin) };
     } else if (action === "test") {
       // Prueba de conexión sin gastar créditos: lista los movimientos disponibles.
       const r = await hf("/v1/motions");
@@ -228,12 +350,13 @@ Deno.serve(async (req: Request) => {
     } else {
       return json({ error: "Acción desconocida: " + action }, 400);
     }
-    if (action === "generate" || (result.revisados as number) > 0) {
+    if (action === "generate" || action === "image" || (result.revisados as number) > 0) {
       await sb.from("sync_runs").insert({ kind: "video:" + action, status: result.ok === false ? "error" : "ok", finished_at: now(), stats: result });
     }
     return json(result);
   } catch (e) {
     const msg = String(e).slice(0, 500);
+    if (action === "image" && body.id) await sb.from("imagenes").update({ status: "error", error: msg, updated_at: now() }).eq("id", Number(body.id));
     if (action === "generate" && body.id) {
       await sb.from("videos").update({ status: "error", error: msg, updated_at: now() }).eq("id", Number(body.id));
     }
