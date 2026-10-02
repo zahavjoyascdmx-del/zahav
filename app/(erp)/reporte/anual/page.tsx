@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 type R = {
   mes: string; ordenes: number; piezas: number; venta: number; comision: number; envio: number; ret_iva: number; ret_isr: number; cupon: number;
-  neto_recibido: number; material: number; insumos: number; sin_costo: number; utilidad: number; canceladas: number; directas_n: number; directas: number; directas_cobrado: number;
+  neto_recibido: number; material: number; insumos: number; sin_costo: number; utilidad: number; canceladas: number; directas_n: number; directas: number; directas_cobrado: number; devueltas: number; en_disputa: number; disputa_monto: number;
 };
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const mesTxt = (iso: string) => `${MESES[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
@@ -34,7 +34,7 @@ export default async function ReporteAnualPage() {
               <tr>
                 <th>Mes</th><th className="num">Órdenes</th><th className="num">Piezas</th><th className="num">Venta</th><th className="num">Comisión</th><th className="num">Envíos</th>
                 <th className="num">IVA</th><th className="num">ISR</th><th className="num">Cupones</th><th className="num">Depositado</th><th className="num">Material</th><th className="num">Insumos</th><th className="num">Utilidad</th><th className="num">Margen</th>
-                <th className="num">Cancel.</th><th className="num">Directas</th>
+                <th className="num">Cancel. / devueltas</th><th className="num">Directas</th>
               </tr>
             </thead>
             <tbody>
@@ -54,7 +54,7 @@ export default async function ReporteAnualPage() {
                   <td className="num">{mxn(r.insumos)}</td>
                   <td className="num" style={{ fontWeight: 700, color: Number(r.utilidad) >= 0 ? "var(--calm)" : "var(--alarm)" }}>{mxn(r.utilidad)}</td>
                   <td className="num">{pct(r.utilidad, r.venta)}</td>
-                  <td className="num">{num(r.canceladas)}</td>
+                  <td className="num">{num(r.canceladas)}{Number(r.devueltas) > 0 && <div className="muted">{num(r.devueltas)} devueltas</div>}{Number(r.en_disputa) > 0 && <div className="muted">{num(r.en_disputa)} en disputa</div>}</td>
                   <td className="num">{Number(r.directas_n) ? `${num(r.directas_n)} · ${mxn(r.directas)}` : "—"}</td>
                 </tr>
               ))}
