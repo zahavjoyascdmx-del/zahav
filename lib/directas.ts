@@ -14,7 +14,7 @@ export const folioRecibo = (id: number) => `R-${String(id).padStart(4, "0")}`;
 export type Venta = {
   id: number; fecha: string; canal: string; cliente: string; telefono: string | null; product_id: number | null; descripcion: string | null;
   talla: string | null; kilates: string | null; color: string | null; piedra: string | null;
-  precio_total: number; pagado: number; entrega_estimada: string | null; estado: string; notas: string | null;
+  precio_total: number; pagado: number; costo: number | null; entrega_estimada: string | null; estado: string; notas: string | null;
   share_token: string; products: { name: string } | null;
 };
 export type Pago = { id: number; sale_id: number; fecha: string; monto: number; metodo: string; nota: string | null; share_token: string };

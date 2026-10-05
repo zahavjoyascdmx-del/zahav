@@ -124,6 +124,7 @@ export default async function DirectasPage({ searchParams }: { searchParams: Pro
           <label>Color oro<select name="color" defaultValue=""><option value="">—</option><option>Amarillo</option><option>Blanco</option><option>Rosa</option></select></label>
           <label>Piedra<input name="piedra" placeholder="Diamante .25ct, zirconia..." /></label>
           <label>Precio total<input name="precio_total" type="number" step="0.01" min="0" required placeholder="0" /></label>
+          <label>Costo de la pieza<input name="costo" type="number" step="0.01" min="0" placeholder="oro + piedra + hechura" /></label>
           <label>Anticipo pagado<input name="pagado" type="number" step="0.01" min="0" placeholder="0" /></label>
           <label>Método del anticipo<select name="metodo" defaultValue="transferencia">{METODOS.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>
           <label>Entrega estimada<input type="date" name="entrega_estimada" /></label>

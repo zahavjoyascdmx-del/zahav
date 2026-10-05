@@ -24,6 +24,7 @@ function camposVenta(fd: FormData) {
     color: str(fd, "color"),
     piedra: str(fd, "piedra"),
     precio_total: num(fd, "precio_total"),
+    costo: String(fd.get("costo") ?? "").trim() === "" ? null : num(fd, "costo"),
     entrega_estimada: str(fd, "entrega_estimada"),
     notas: str(fd, "notas"),
   };

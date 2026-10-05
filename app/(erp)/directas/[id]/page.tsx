@@ -135,6 +135,7 @@ export default async function VentaPage({ params, searchParams }: { params: Prom
             <label>Color oro<select name="color" defaultValue={v.color ?? ""}><option value="">—</option><option>Amarillo</option><option>Blanco</option><option>Rosa</option></select></label>
             <label>Piedra<input name="piedra" defaultValue={v.piedra ?? ""} /></label>
             <label>Precio total<input name="precio_total" type="number" step="0.01" min="0" defaultValue={v.precio_total} required /></label>
+            <label>Costo de la pieza<input name="costo" type="number" step="0.01" min="0" defaultValue={v.costo ?? ""} placeholder="oro + piedra + hechura" /></label>
             <label>Entrega estimada<input type="date" name="entrega_estimada" defaultValue={v.entrega_estimada ?? ""} /></label>
             <label className="wide">Notas<textarea name="notas" rows={3} defaultValue={v.notas ?? ""} /></label>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>

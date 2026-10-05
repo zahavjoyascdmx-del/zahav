@@ -11,7 +11,7 @@ type MesResumen = { mes: string; ordenes: number; piezas: number; venta: number;
 type Pub = { product_id: number | null; cost: number; clicks: number; prints: number; units: number; total_amount: number; dias: number };
 type CargoML = { detail_sub_type: string | null; concepto: string | null; amount: number; n: number };
 type Gasto = { id: number; mes: string; concepto: string; monto: number; nota: string | null };
-type Directa = { id: number; fecha: string; canal: string; cliente: string; precio_total: number; pagado: number; estado: string; product_id: number | null; descripcion: string | null; products: { name: string } | null };
+type Directa = { id: number; fecha: string; canal: string; cliente: string; precio_total: number; pagado: number; costo: number | null; estado: string; product_id: number | null; descripcion: string | null; products: { name: string } | null };
 
 export default async function ReportePage({ searchParams }: { searchParams: Promise<{ mes?: string; ok?: string }> }) {
   const { mes: mesParam, ok } = await searchParams;
@@ -28,7 +28,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
     supabase.rpc("publicidad_mes", { p_mes: mes }),
     supabase.rpc("cargos_ml_mes", { p_mes: mes }),
     supabase.from("gastos_mensuales").select("*").eq("mes", mes).order("id"),
-    supabase.from("direct_sales").select("id,fecha,canal,cliente,precio_total,pagado,estado,product_id,descripcion,products(name)").neq("estado", "cancelada").gte("fecha", mes).lt("fecha", mesSiguiente(mes)).order("fecha"),
+    supabase.from("direct_sales").select("id,fecha,canal,cliente,precio_total,pagado,costo,estado,product_id,descripcion,products(name)").neq("estado", "cancelada").gte("fecha", mes).lt("fecha", mesSiguiente(mes)).order("fecha"),
   ]);
   if (rep.error) throw new Error(rep.error.message);
 
@@ -49,12 +49,14 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
   const totalGastosManuales = gastos.reduce((a, g) => a + Number(g.monto), 0);
   // Ventas fuera de Mercado Libre (pedidos directos del mes): utilidad = precio − costo del producto del catálogo (si está mapeado)
   const directas = ((directasRes.data ?? []) as unknown as Directa[]);
-  const costoDe = (pid: number | null) => (pid ? filas.find((f) => f.product_id === pid)?.costo_unitario ?? 0 : 0);
+  // Costo de una venta directa: el capturado a mano; si no, el del producto del catálogo. Sin costo no suma utilidad.
+  const costoDe = (d: Directa) => (d.costo != null ? Number(d.costo) : d.product_id ? filas.find((f) => f.product_id === d.product_id)?.costo_unitario ?? null : null);
   const dirVenta = directas.reduce((a, d) => a + Number(d.precio_total), 0);
   const dirCobrado = directas.reduce((a, d) => a + Number(d.pagado), 0);
-  const dirCosto = directas.reduce((a, d) => a + costoDe(d.product_id), 0);
-  const dirSinCosto = directas.filter((d) => !costoDe(d.product_id)).length;
-  const dirUtilidad = dirVenta - dirCosto;
+  const dirConCosto = directas.filter((d) => costoDe(d) != null);
+  const dirSinCosto = directas.length - dirConCosto.length;
+  const dirCosto = dirConCosto.reduce((a, d) => a + Number(costoDe(d)), 0);
+  const dirUtilidad = dirConCosto.reduce((a, d) => a + Number(d.precio_total), 0) - dirCosto;
   const conVentas = filas.filter((f) => f.piezas > 0 || f.stock_total > 0);
   const t = totales(filas);
   const fijosCfg = ((cfg.data ?? []).find((r) => r.key === "gastos_fijos")?.value ?? {}) as Record<string, number>;
@@ -141,7 +143,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
             <div className="kpi"><div className="label">Utilidad neta</div><div className="value">{mxn(t.utilidad_neta)}</div><div className="sub">tras insumos y publicidad por producto{t.venta > 0 ? ` · ${pct(t.utilidad_neta / t.venta)} de la venta` : ""}{t.gastos > 0 ? ` · ${pct(t.utilidad_neta / t.gastos)} sobre lo invertido` : ""}</div></div>
             <div className="kpi"><div className="label">Otros cargos ML</div><div className="value">{mxn(otrosCargos)}</div><div className="sub">{listaCargos.length ? "almacenamiento Full, retiros, eShop, devoluciones…" : "sin datos de facturación para este mes"}</div></div>
             <div className="kpi"><div className="label">Gastos fijos</div><div className="value">{mxn(totalFijos + totalGastosManuales)}</div><div className="sub">{[...Object.entries(fijos).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${mxn(v)}`), ...(totalGastosManuales > 0 ? [`otros ${mxn(totalGastosManuales)}`] : [])].join(" · ") || "configúralos en Configuración"}</div></div>
-            {directas.length > 0 && <div className="kpi"><div className="label">Ventas directas</div><div className="value">{mxn(dirUtilidad)}</div><div className="sub">utilidad de {num(directas.length)} pedidos fuera de ML · venta {mxn(dirVenta)} · cobrado {mxn(dirCobrado)}{dirSinCosto ? ` · ${dirSinCosto} sin costo` : ""}</div></div>}
+            {directas.length > 0 && <div className="kpi"><div className="label">Ventas directas</div><div className="value">{mxn(dirUtilidad)}</div><div className="sub">utilidad de {num(dirConCosto.length)} de {num(directas.length)} pedidos fuera de ML · venta {mxn(dirVenta)} · cobrado {mxn(dirCobrado)}{dirSinCosto ? ` · ${dirSinCosto} sin costo capturado: no suman utilidad` : ""}</div></div>}
             <div className="kpi"><div className="label">Utilidad final</div><div className={`value ${utilidadFinal < 0 ? "zero" : ""}`}>{mxn(utilidadFinal)}</div><div className="sub">neta + directas − publicidad sin producto − otros cargos ML − gastos fijos y del mes</div></div>
             <div className="kpi"><div className="label">Inventario a costo</div><div className="value">{mxn(t.valor_stock)}</div><div className="sub">{num(t.stock_total)} piezas en Full, tránsito, bodega y Amazon</div></div>
           </div>
