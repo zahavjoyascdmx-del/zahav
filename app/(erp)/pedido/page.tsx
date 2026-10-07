@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, dec1, fechaCorta, mxn, num, pct, todayCdmx } from "@/lib/format";
-import { calcularFila, listaMeses, recalcularIndicadores, sugerirPedido, TOP_SELLERS, type FilaCalculada, type FilaReporte, type ProductoSugerido, type VarianteSugerida, type VarianteVenta } from "@/lib/reporte";
+import { calcularFila, listaMeses, recalcularIndicadores, sugerirPedido, temporadasEn, COBERTURA_TOP, TOP_SELLERS, type FilaCalculada, type FilaReporte, type ProductoSugerido, type VarianteSugerida, type VarianteVenta } from "@/lib/reporte";
 
 export const dynamic = "force-dynamic";
 const RANGOS = [60, 90, 180];
@@ -80,6 +80,7 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
   const perdiendo = res.productos.concat(res.excluidos).filter((x) => x.demanda_bloqueada > 0.15 && x.utilidad_pieza > 0).sort((a, b) => b.ritmo * b.demanda_bloqueada * b.utilidad_pieza - a.ritmo * a.demanda_bloqueada * a.utilidad_pieza).slice(0, 8);
   const utilidadDiariaPerdida = perdiendo.reduce((a, x) => a + x.ritmo * x.demanda_bloqueada * x.utilidad_pieza, 0);
   const haySnapshots = variantes.some((v) => v.dias_snapshot >= 14);
+  const temporadas = temporadasEn(addDays(hoy, 1), Math.max(cobertura, COBERTURA_TOP));
   const tops = res.productos.concat(res.excluidos).filter((x) => x.top_seller).sort((a, b) => b.fila.piezas - a.fila.piezas);
 
   return (
@@ -100,8 +101,21 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
           <div className="kpi"><div className="label">Presupuesto de compra</div><div className="value">{mxn(presupuesto)}</div><div className="sub">{Number(presuParam) > 0 ? "monto que escribiste" : Number(presuCfg.fijo) > 0 ? "monto fijo en Configuración" : `${pctPresu}% de lo depositado`}{totalFijos > 0 ? ` · gastos fijos ${mxn(totalFijos)}` : ""}</div></div>
           <div className="kpi"><div className="label">Pedido sugerido</div><div className="value">{mxn(res.total)}</div><div className="sub">{num(res.productos.reduce((a, x) => a + x.sugerido, 0))} piezas en {res.productos.length} productos</div></div>
           <div className="kpi"><div className="label">Utilidad esperada</div><div className="value">{mxn(res.utilidad)}</div><div className="sub">al vender ese pedido, con la utilidad neta real del periodo</div></div>
-          <div className="kpi"><div className="label">Cobertura objetivo</div><div className="value">{cobertura} días</div><div className="sub">{cobertura === coberturaCfg ? `${leadTime} de entrega + ${buffer} de colchón` : "prueba; la configurada es " + coberturaCfg}</div></div>
+          <div className="kpi"><div className="label">Cobertura objetivo</div><div className="value">{cobertura} días</div><div className="sub">{cobertura === coberturaCfg ? `${leadTime} de entrega + ${buffer} de colchón` : "prueba; la configurada es " + coberturaCfg}{cobertura < COBERTURA_TOP ? ` · top sellers ${COBERTURA_TOP} días` : ""}</div></div>
         </div>
+        {temporadas.length > 0 && (
+          <p className="notice" style={{ marginTop: 12 }}>
+            {temporadas.map((t, i) => {
+              const pedirAntes = addDays(t.desde, -leadTime);
+              return (
+                <span key={t.nombre + t.desde}>
+                  {i > 0 && " · "}<b>{t.nombre} ×{t.factor}</b> del {fechaCorta(t.desde)} al {fechaCorta(t.hasta)}: la venta de esos días ya se cuenta {t.factor === 2 ? "doble" : `×${t.factor}`} en el pedido
+                  {pedirAntes > hoy ? `; para tener el stock a tiempo pide a más tardar el ${fechaCorta(pedirAntes)}` : pedirAntes <= hoy && t.desde > hoy ? "; ya estás dentro del tiempo de entrega, pide hoy" : ""}.
+                </span>
+              );
+            })}
+          </p>
+        )}
         {presupuesto - res.total > 1000 && (
           <p className="notice" style={{ marginTop: 12, background: "var(--calm-bg)", color: "var(--calm)" }}>
             Con la cobertura de {cobertura} días te sobran {mxn(presupuesto - res.total)} del presupuesto: tienes stock suficiente en la mayoría de los productos. Puedes guardarlos o ver qué pedirías con más cobertura:
@@ -120,10 +134,10 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
 
       {tops.length > 0 && (
         <div className="card tight" style={{ marginBottom: 14 }}>
-          <h2>Top sellers <span className="muted">· tus {TOP_SELLERS} productos más vendidos; reciben presupuesto antes que todo lo demás</span></h2>
+          <h2>Top sellers <span className="muted">· tus {TOP_SELLERS} productos más vendidos: se cubren {Math.max(cobertura, COBERTURA_TOP)} días de venta{temporadas.length > 0 ? ` (con ${temporadas.map((t) => `${t.nombre} ×${t.factor}`).join(", ")})` : ""} y reciben presupuesto antes que todo lo demás</span></h2>
           <div className="tbl-wrap">
             <table className="compact">
-              <thead><tr><th>Producto</th><th className="num">Vende/mes</th><th className="num">Stock (Full + bodega)</th><th className="num">Alcanza</th><th className="num">Pedir</th><th className="num">Costo</th><th className="num">Oro</th><th>Tallas a pedir</th><th>Mandar a Full desde bodega</th></tr></thead>
+              <thead><tr><th>Producto</th><th className="num">Vende/mes</th><th className="num">Venta a cubrir</th><th className="num">Stock (Full + bodega)</th><th className="num">Alcanza</th><th className="num">Pedir</th><th className="num">Costo</th><th className="num">Oro</th><th>Tallas a pedir</th><th>Mandar a Full desde bodega</th></tr></thead>
               <tbody>
                 {tops.map((x) => {
                   const aFull = x.variantes.filter((v) => v.mandar_a_full);
@@ -132,6 +146,7 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
                     <tr key={x.fila.product_id}>
                       <td><Link href={`/ventas/${x.fila.product_id}`}><b>{x.fila.producto}</b></Link></td>
                       <td className="num">{num(Math.round(x.ritmo_obs * 30))}{x.ritmo > x.ritmo_obs * 1.05 && <span className="muted"> ({num(Math.round(x.ritmo * 30))} con todas las tallas)</span>}</td>
+                      <td className="num">{num(x.objetivo)} pzas<span className="muted"> en {x.cobertura_obj} días</span></td>
                       <td className="num">{num(x.fila.stock_full + x.fila.stock_transito)} + {num(x.fila.stock_casa)}</td>
                       <td className="num">{x.cobertura_dias != null ? `${num(Math.round(x.cobertura_dias))} días` : "—"}</td>
                       <td className="num"><b>{x.sugerido > 0 ? `${num(x.sugerido)} pzas` : "—"}</b></td>
@@ -207,7 +222,7 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
         Cómo se corrige el ritmo: {haySnapshots
           ? "con la foto diaria de stock en Full se cuentan los días que cada talla estuvo en cero y se calcula piezas ÷ días con stock."
           : "la foto diaria de stock en Full empezó a guardarse hoy; mientras no haya 14 días de historia, una talla que hoy está en cero se considera agotada desde su última venta (piezas ÷ días con stock, máximo 3×). Cada semana la estimación será más exacta."}
-        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos − publicidad de Product Ads de cada publicación). El presupuesto se reparte primero a los {TOP_SELLERS} más vendidos y después a lo que más utilidad diaria deja y está por agotarse.
+        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos − publicidad de Product Ads de cada publicación). Temporadas: Buen Fin cuenta ×2, del 1 al 14 de febrero y Hot Sale ×1.5; si el periodo de historia incluyó alguna, se descuenta para no inflar el ritmo. El presupuesto se reparte primero a los {TOP_SELLERS} más vendidos y después a lo que más utilidad diaria deja y está por agotarse.
       </p>
     </>
   );
