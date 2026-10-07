@@ -138,8 +138,12 @@ export type ProductoSugerido = {
   cobertura_dias: number | null; // días que alcanza el stock actual al ritmo corregido
   objetivo: number; faltan: number; sugerido: number; costo_pedido: number;
   utilidad_pieza: number; utilidad_esperada: number; score: number;
+  top_seller: boolean;      // de los más vendidos del periodo: recibe presupuesto antes que el resto
   motivo: string;
 };
+
+/** Cuántos productos (los más vendidos en piezas) reciben presupuesto antes que los demás. */
+export const TOP_SELLERS = 5;
 
 export type ParametrosPedido = { dias: number; hoy: string; cobertura: number; presupuesto: number };
 
@@ -183,9 +187,10 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
     const bloqueada = piezasPeriodo > 0 ? calc.filter((v) => v.agotada).reduce((a, v) => a + n(v.piezas), 0) / piezasPeriodo : 0;
     const stockTotal = fila.stock_full + fila.stock_transito + fila.stock_casa + fila.stock_amazon;
     const objetivo = Math.round(ritmo * p.cobertura);
-    // Amazon no se conoce por talla: se descuenta del faltante total del producto
+    // El faltante se cuenta talla por talla: lo que sobra en una talla no cubre la demanda de otra.
+    // Amazon no se conoce por talla: se descuenta del faltante total del producto.
     const faltanVariantes = calc.reduce((a, v) => a + v.faltan, 0);
-    const faltan = Math.max(0, Math.min(faltanVariantes, objetivo - stockTotal));
+    const faltan = Math.max(0, faltanVariantes - fila.stock_amazon);
     const utilidad_pieza = fila.piezas > 0 ? fila.utilidad_neta / fila.piezas : fila.precio_sugerido > 0 ? fila.precio_sugerido * 0.72 - fila.costo_unitario - n(fila.insumo_pieza) : 0;
 
     let motivo = "";
@@ -202,12 +207,19 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
       objetivo, faltan, sugerido: 0, costo_pedido: 0, utilidad_pieza,
       utilidad_esperada: 0,
       score: utilidad_pieza > 0 ? utilidad_pieza * ritmo : 0, // utilidad diaria en juego
+      top_seller: false,
       motivo,
     });
   }
 
-  // Reparto del presupuesto: primero lo que más utilidad diaria deja y está por agotarse.
-  const candidatos = productos.filter((x) => !x.motivo).sort((a, b) => b.score - a.score || (a.cobertura_dias ?? 0) - (b.cobertura_dias ?? 0));
+  // Los más vendidos (en piezas, con utilidad positiva) siempre reciben presupuesto primero.
+  productos.filter((x) => x.utilidad_pieza > 0 && !x.fila.sin_costo && x.fila.piezas > 0)
+    .sort((a, b) => b.fila.piezas - a.fila.piezas).slice(0, TOP_SELLERS).forEach((x) => { x.top_seller = true; });
+
+  // Reparto del presupuesto: primero los más vendidos, luego lo que más utilidad diaria deja y está por agotarse.
+  const candidatos = productos.filter((x) => !x.motivo).sort((a, b) =>
+    Number(b.top_seller) - Number(a.top_seller) || (a.top_seller ? b.fila.piezas - a.fila.piezas : 0) ||
+    b.score - a.score || (a.cobertura_dias ?? 0) - (b.cobertura_dias ?? 0));
   let restante = p.presupuesto;
   for (const x of candidatos) {
     const costo = x.fila.costo_unitario;
@@ -224,7 +236,7 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
     for (const v of orden) { v.sugerido = Math.min(v.faltan, Math.floor((v.faltan / totalFaltan) * puede)); quedan -= v.sugerido; }
     for (const v of orden) { if (quedan <= 0) break; if (v.sugerido < v.faltan) { v.sugerido++; quedan--; } }
   }
-  const conPedido = productos.filter((x) => x.sugerido > 0).sort((a, b) => b.score - a.score);
+  const conPedido = productos.filter((x) => x.sugerido > 0).sort((a, b) => Number(b.top_seller) - Number(a.top_seller) || b.score - a.score);
   const excluidos = productos.filter((x) => x.sugerido === 0).sort((a, b) => b.fila.venta - a.fila.venta);
   return {
     productos: conPedido,
