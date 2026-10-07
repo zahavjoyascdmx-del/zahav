@@ -46,3 +46,8 @@ select cron.schedule(
   '*/2 * * * *',
   $cron$select private.call_edge('higgsfield-video', '{"action":"poll"}'::jsonb) where exists (select 1 from public.videos where status in ('pendiente', 'en_cola', 'generando')) or exists (select 1 from public.imagenes where status in ('pendiente', 'en_cola', 'generando'))$cron$
 );
+
+-- Parámetros extra por modelo (p. ej. resolution) que se envían tal cual a Higgsfield. quality pasa a ser opcional.
+alter table public.imagenes add column if not exists params jsonb not null default '{}'::jsonb;
+alter table public.imagenes alter column quality drop not null, alter column quality drop default;
+alter table public.imagenes alter column model set default 'alibaba/qwen-image-3/edit';

@@ -199,20 +199,23 @@ async function poll(): Promise<Json> {
 
 // ---------------------------------------------------------------- imágenes (GPT Image: edición de una foto real)
 type Imagen = {
-  id: number; titulo: string; image_url: string; prompt: string; model: string; quality: string; aspect_ratio: string | null; n: number;
-  status: string; request_id: string | null; status_url: string | null; attempts: number; updated_at: string;
+  id: number; titulo: string; image_url: string; prompt: string; model: string; quality: string | null; aspect_ratio: string | null; n: number;
+  params: Json | null; status: string; request_id: string | null; status_url: string | null; attempts: number; updated_at: string;
 };
 
-// Modelos de imagen verificados en la API: openai/gpt-image-2/edit, openai/gpt-image-1.5/edit (prompt, image_urls[], quality low|medium|high, aspect_ratio 1:1|3:2|2:3),
-// openai/gpt-image-2 y openai/gpt-image-1.5 (texto a imagen), higgsfield-ai/soul/v2/standard y higgsfield-ai/soul/reference (texto a imagen).
+// Modelos de edición de imagen vistos en GET /models (oct-2026): alibaba/qwen-image-3/edit (image_urls[]), higgsfield-ai/soul/v2/image-to-image (image_url, resolution 720p|1080p),
+// marketing-studio/image (resolution 1k|2k|4k), xai/grok-imagine-image-2.0, ideogram/v4.0. El catálogo cambia: consultar /models antes de fijar un modelo.
+// Cualquier parámetro extra del modelo se guarda en imagenes.params y se envía tal cual.
 async function generateImage(id: number): Promise<Json> {
   const { data: v, error } = await sb.from("imagenes").select("*").eq("id", id).maybeSingle();
   if (error || !v) throw new Error("Imagen no encontrada: " + (error?.message ?? id));
   const im = v as Imagen;
-  const model = im.model || "openai/gpt-image-2/edit";
-  const body: Json = { prompt: im.prompt, quality: im.quality || "high" };
+  const model = im.model || "alibaba/qwen-image-3/edit";
+  const body: Json = { prompt: im.prompt, ...(im.params ?? {}) };
+  if (im.quality) body.quality = im.quality;
   if (im.aspect_ratio) body.aspect_ratio = im.aspect_ratio;
-  if (/\/edit$/.test(model)) body.image_urls = [im.image_url];
+  if (/image-to-image$/.test(model)) body.image_url = im.image_url;
+  else if (/\/edit$|marketing-studio|grok|ideogram|influencer/.test(model)) body.image_urls = [im.image_url];
   const r = await hf("/" + model.replace(/^\//, ""), { method: "POST", body: JSON.stringify(body) });
   if (!r.ok) {
     const msg = explain(r.status, r.body, r.text);
