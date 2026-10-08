@@ -233,7 +233,7 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
       )}
 
       <div id="gastos" className="card" style={{ marginBottom: 14 }}>
-        <h2>Otros gastos de {nombreMes(mes)} <span className="muted">· lo que no viene de Mercado Libre: cajas, sueldos, envíos, comisiones bancarias… Se restan en la utilidad final.</span></h2>
+        <h2>Otros gastos de {nombreMes(mes)} <span className="muted">· lo que no viene de Mercado Libre: cajas, sueldos, envíos, comisiones bancarias… Se restan en la utilidad final. Captura detallada por categoría en <Link href={`/gastos?mes=${mes}`} style={{ textDecoration: "underline" }}>Gastos y proveedores</Link>.</span></h2>
         {gastos.length > 0 && (
           <div className="tbl-wrap" style={{ marginBottom: 10 }}>
             <table className="compact">

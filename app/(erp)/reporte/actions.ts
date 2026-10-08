@@ -32,9 +32,10 @@ export async function agregarGasto(fd: FormData) {
   const monto = Number(String(fd.get("monto") ?? "").replace(/[^0-9.]/g, ""));
   if (!/^\d{4}-\d{2}-01$/.test(mes) || !concepto || !(monto > 0)) redirect(`/reporte?mes=${mes}`);
   const supabase = await createClient();
-  const { error } = await supabase.from("gastos_mensuales").insert({ mes, concepto, monto, nota: String(fd.get("nota") ?? "").trim() || null });
+  const { error } = await supabase.from("gastos_mensuales").insert({ mes, fecha: mes, concepto, monto, nota: String(fd.get("nota") ?? "").trim() || null });
   if (error) throw new Error(error.message);
   revalidatePath("/reporte");
+  revalidatePath("/gastos");
   redirect(`/reporte?mes=${mes}#gastos`);
 }
 
@@ -44,5 +45,6 @@ export async function borrarGasto(fd: FormData) {
   const supabase = await createClient();
   await supabase.from("gastos_mensuales").delete().eq("id", id);
   revalidatePath("/reporte");
+  revalidatePath("/gastos");
   redirect(`/reporte?mes=${mes}#gastos`);
 }
