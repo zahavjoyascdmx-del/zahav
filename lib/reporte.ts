@@ -127,6 +127,7 @@ export type VarianteVenta = {
 
 export type VarianteSugerida = VarianteVenta & {
   ritmo_obs: number; ritmo: number; dias_sin_stock: number; objetivo: number; faltan: number; sugerido: number; agotada: boolean; mandar_a_full: boolean;
+  top_seller: boolean; // su color es top seller del producto: cubre COBERTURA_TOP días y recibe presupuesto primero
 };
 
 export type ProductoSugerido = {
@@ -138,13 +139,15 @@ export type ProductoSugerido = {
   cobertura_dias: number | null; // días que alcanza el stock actual al ritmo corregido
   objetivo: number; faltan: number; sugerido: number; costo_pedido: number;
   utilidad_pieza: number; utilidad_esperada: number; score: number;
-  top_seller: boolean;      // de los más vendidos del periodo: recibe presupuesto antes que el resto
-  cobertura_obj: number;    // días de venta que debe cubrir el stock (los top sellers, al menos COBERTURA_TOP)
+  top_seller: boolean;      // tiene al menos un color entre los más vendidos
+  colores_top: string[];    // colores top seller del producto (p. ej. solo Amarillo); los demás colores van como cualquier producto
   motivo: string;
 };
 
-/** Cuántos productos (los más vendidos en piezas) reciben presupuesto antes que los demás. */
+/** Cuántos producto + color (los más vendidos en piezas) reciben presupuesto antes que los demás. */
 export const TOP_SELLERS = 5;
+/** Parte mínima de las piezas del producto que debe vender un color para contar como top seller. */
+export const MIN_PARTE_COLOR_TOP = 0.25;
 /** Días de venta que siempre se cubren en los top sellers. */
 export const COBERTURA_TOP = 60;
 
@@ -211,9 +214,18 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
   const porProducto = new Map<number, VarianteVenta[]>();
   for (const v of variantes) porProducto.set(v.product_id, [...(porProducto.get(v.product_id) ?? []), v]);
 
-  // Los más vendidos (en piezas, con utilidad positiva) cubren al menos COBERTURA_TOP días y reciben presupuesto primero.
-  const tops = new Set(filas.filter((f) => !f.sin_costo && f.piezas > 0 && f.utilidad_neta > 0)
-    .sort((a, b) => b.piezas - a.piezas).slice(0, TOP_SELLERS).map((f) => f.product_id));
+  // Top sellers por producto + color (la Argolla 3mm es top en Amarillo, no en Rosa ni Blanco):
+  // esos colores cubren al menos COBERTURA_TOP días y reciben presupuesto primero.
+  const elegibles = new Set(filas.filter((f) => !f.sin_costo && f.piezas > 0 && f.utilidad_neta > 0).map((f) => f.product_id));
+  const piezasColor = new Map<string, number>();
+  for (const v of variantes) if (elegibles.has(v.product_id)) { const k = `${v.product_id}|${v.color}`; piezasColor.set(k, (piezasColor.get(k) ?? 0) + n(v.piezas)); }
+  const piezasProducto = new Map<number, number>();
+  for (const [k, pz] of piezasColor) { const id = Number(k.split("|")[0]); piezasProducto.set(id, (piezasProducto.get(id) ?? 0) + pz); }
+  // un color minoritario (p. ej. Rosa con 5% de las ventas) no es top aunque el producto lo sea
+  const piezasTop = new Map([...piezasColor]
+    .filter(([k, pz]) => pz > 0 && pz >= MIN_PARTE_COLOR_TOP * (piezasProducto.get(Number(k.split("|")[0])) ?? 0))
+    .sort((a, b) => b[1] - a[1]).slice(0, TOP_SELLERS));
+  const esTop = (v: VarianteVenta) => piezasTop.has(`${v.product_id}|${v.color}`);
 
   // Temporadas: el historial se lleva a días normales (si traía Buen Fin no infla el ritmo)
   // y la demanda por cubrir se multiplica en los días de temporada que vienen.
@@ -226,11 +238,9 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
     const vars = porProducto.get(fila.product_id) ?? [];
     const piezasPeriodo = vars.reduce((a, v) => a + n(v.piezas), 0);
     const ritmo_obs = piezasPeriodo / p.dias;
-    const top_seller = tops.has(fila.product_id);
-    const cobertura_obj = top_seller ? Math.max(p.cobertura, COBERTURA_TOP) : p.cobertura;
-    const diasDemanda = diasPorCubrir(cobertura_obj);
-
     const calc: VarianteSugerida[] = vars.map((v) => {
+      const top = esTop(v);
+      const diasDemanda = diasPorCubrir(top ? Math.max(p.cobertura, COBERTURA_TOP) : p.cobertura);
       const sin = diasSinStock(v, p);
       const conStock = Math.max(p.dias - sin, p.dias / 3); // nunca inflar más de 3×
       const ritmoV = n(v.piezas) > 0 ? n(v.piezas) / (conStock * factorHistoria) : 0;
@@ -238,13 +248,14 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
       const objetivo = Math.round(ritmoV * diasDemanda); // menos de media pieza en el periodo objetivo: no se repone
       const disponible = n(v.available) + n(v.in_transit) + n(v.casa); // lo de bodega también cubre la demanda
       const faltan = Math.max(0, objetivo - disponible);
-      return { ...v, ritmo_obs: n(v.piezas) / p.dias, ritmo: ritmoV, dias_sin_stock: sin, objetivo, faltan, sugerido: 0, agotada, mandar_a_full: agotada && n(v.casa) > 0 };
+      return { ...v, ritmo_obs: n(v.piezas) / p.dias, ritmo: ritmoV, dias_sin_stock: sin, objetivo, faltan, sugerido: 0, agotada, mandar_a_full: agotada && n(v.casa) > 0, top_seller: top };
     });
 
     const ritmo = calc.reduce((a, v) => a + v.ritmo, 0);
     const bloqueada = piezasPeriodo > 0 ? calc.filter((v) => v.agotada).reduce((a, v) => a + n(v.piezas), 0) / piezasPeriodo : 0;
     const stockTotal = fila.stock_full + fila.stock_transito + fila.stock_casa + fila.stock_amazon;
-    const objetivo = Math.round(ritmo * diasDemanda);
+    const objetivo = calc.reduce((a, v) => a + v.objetivo, 0);
+    const colores_top = [...new Set(calc.filter((v) => v.top_seller).map((v) => v.color))];
     // El faltante se cuenta talla por talla: lo que sobra en una talla no cubre la demanda de otra.
     // Amazon no se conoce por talla: se descuenta del faltante total del producto.
     const faltanVariantes = calc.reduce((a, v) => a + v.faltan, 0);
@@ -265,31 +276,37 @@ export function sugerirPedido(filas: FilaCalculada[], variantes: VarianteVenta[]
       objetivo, faltan, sugerido: 0, costo_pedido: 0, utilidad_pieza,
       utilidad_esperada: 0,
       score: utilidad_pieza > 0 ? utilidad_pieza * ritmo : 0, // utilidad diaria en juego
-      top_seller, cobertura_obj,
+      top_seller: colores_top.length > 0, colores_top,
       motivo,
     });
   }
 
-  // Reparto del presupuesto: primero los más vendidos, luego lo que más utilidad diaria deja y está por agotarse.
-  const candidatos = productos.filter((x) => !x.motivo).sort((a, b) =>
-    Number(b.top_seller) - Number(a.top_seller) || (a.top_seller ? b.fila.piezas - a.fila.piezas : 0) ||
-    b.score - a.score || (a.cobertura_dias ?? 0) - (b.cobertura_dias ?? 0));
+  // Reparto del presupuesto en dos vueltas:
+  // 1) los colores top seller, del más vendido al menos vendido;
+  // 2) todo lo demás (incluidos los otros colores de esos productos), por utilidad diaria en juego.
   let restante = p.presupuesto;
-  for (const x of candidatos) {
+  const asignar = (x: ProductoSugerido, vs: VarianteSugerida[]) => {
     const costo = x.fila.costo_unitario;
-    const puede = Math.min(x.faltan, Math.floor(restante / costo));
-    if (puede <= 0) { x.motivo = "No alcanza el presupuesto este mes."; continue; }
-    x.sugerido = puede;
-    x.costo_pedido = puede * costo;
-    x.utilidad_esperada = puede * x.utilidad_pieza;
-    restante -= x.costo_pedido;
-    // Reparto por talla: primero agotadas, luego proporcional a lo que falta.
+    const orden = vs.filter((v) => v.faltan > v.sugerido).sort((a, b) => Number(b.agotada) - Number(a.agotada) || b.ritmo - a.ritmo);
+    const totalFaltan = orden.reduce((a, v) => a + v.faltan - v.sugerido, 0);
+    // Amazon (no se conoce por talla) ya está descontado en x.faltan
+    const puede = Math.min(totalFaltan, x.faltan - x.sugerido, Math.floor(restante / costo));
+    if (puede <= 0) return;
+    // Reparto por talla: proporcional a lo que falta, el sobrante a las agotadas y las que más venden.
     let quedan = puede;
-    const orden = x.variantes.filter((v) => v.faltan > 0).sort((a, b) => Number(b.agotada) - Number(a.agotada) || b.ritmo - a.ritmo);
-    const totalFaltan = orden.reduce((a, v) => a + v.faltan, 0) || 1;
-    for (const v of orden) { v.sugerido = Math.min(v.faltan, Math.floor((v.faltan / totalFaltan) * puede)); quedan -= v.sugerido; }
+    const extra = orden.map((v) => Math.min(v.faltan - v.sugerido, Math.floor(((v.faltan - v.sugerido) / totalFaltan) * puede)));
+    orden.forEach((v, i) => { v.sugerido += extra[i]; quedan -= extra[i]; });
     for (const v of orden) { if (quedan <= 0) break; if (v.sugerido < v.faltan) { v.sugerido++; quedan--; } }
-  }
+    x.sugerido += puede;
+    x.costo_pedido += puede * costo;
+    x.utilidad_esperada += puede * x.utilidad_pieza;
+    restante -= puede * costo;
+  };
+  const candidatos = productos.filter((x) => !x.motivo);
+  const piezasTopDe = (x: ProductoSugerido) => Math.max(0, ...x.colores_top.map((c) => piezasTop.get(`${x.fila.product_id}|${c}`) ?? 0));
+  for (const x of candidatos.filter((x) => x.top_seller).sort((a, b) => piezasTopDe(b) - piezasTopDe(a))) asignar(x, x.variantes.filter((v) => v.top_seller));
+  for (const x of [...candidatos].sort((a, b) => b.score - a.score || (a.cobertura_dias ?? 0) - (b.cobertura_dias ?? 0))) asignar(x, x.variantes);
+  for (const x of candidatos) if (x.sugerido === 0) x.motivo = "No alcanza el presupuesto este mes.";
   const conPedido = productos.filter((x) => x.sugerido > 0).sort((a, b) => Number(b.top_seller) - Number(a.top_seller) || b.score - a.score);
   const excluidos = productos.filter((x) => x.sugerido === 0).sort((a, b) => b.fila.venta - a.fila.venta);
   return {
