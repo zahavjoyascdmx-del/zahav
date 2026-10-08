@@ -1,4 +1,5 @@
 export const CATEGORIAS: Record<string, string> = {
+  diamantes: "Diamantes y piedras",
   empaque: "Empaque y cajas",
   envios: "Envíos y mensajería",
   sueldos: "Sueldos y comisiones",

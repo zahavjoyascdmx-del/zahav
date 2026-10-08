@@ -47,5 +47,6 @@ create policy allowed_all on public.proveedor_movimientos for all to authenticat
 insert into public.proveedores (nombre)
 select distinct proveedor from public.products where proveedor is not null and proveedor <> ''
 on conflict (nombre) do nothing;
+insert into public.proveedores (nombre, notas) values ('Diamantes', 'Diamantes y piedras') on conflict (nombre) do nothing;
 
 commit;
