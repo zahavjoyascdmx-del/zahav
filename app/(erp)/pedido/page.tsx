@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, dec1, fechaCorta, mxn, num, pct, todayCdmx } from "@/lib/format";
-import { calcularFila, listaMeses, recalcularIndicadores, sugerirPedido, type FilaCalculada, type FilaReporte, type VarianteVenta } from "@/lib/reporte";
+import { calcularFila, listaMeses, recalcularIndicadores, sugerirPedido, temporadasEn, COBERTURA_TOP, TOP_SELLERS, type FilaCalculada, type FilaReporte, type ProductoSugerido, type VarianteSugerida, type VarianteVenta } from "@/lib/reporte";
 
 export const dynamic = "force-dynamic";
 const RANGOS = [60, 90, 180];
@@ -80,6 +80,22 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
   const perdiendo = res.productos.concat(res.excluidos).filter((x) => x.demanda_bloqueada > 0.15 && x.utilidad_pieza > 0).sort((a, b) => b.ritmo * b.demanda_bloqueada * b.utilidad_pieza - a.ritmo * a.demanda_bloqueada * a.utilidad_pieza).slice(0, 8);
   const utilidadDiariaPerdida = perdiendo.reduce((a, x) => a + x.ritmo * x.demanda_bloqueada * x.utilidad_pieza, 0);
   const haySnapshots = variantes.some((v) => v.dias_snapshot >= 14);
+  const temporadas = temporadasEn(addDays(hoy, 1), Math.max(cobertura, COBERTURA_TOP));
+  const coberturaTop = Math.max(cobertura, COBERTURA_TOP);
+  // Una fila por producto + color top seller, solo con las tallas de ese color
+  const tops = res.productos.concat(res.excluidos).flatMap((x) => x.colores_top.map((color) => {
+    const vs = x.variantes.filter((v) => v.color === color);
+    const suma = (f: (v: VarianteSugerida) => number) => vs.reduce((a, v) => a + f(v), 0);
+    const ritmo = suma((v) => v.ritmo);
+    const enFull = suma((v) => (v.available ?? 0) + (v.in_transit ?? 0));
+    const casa = suma((v) => v.casa);
+    const sugerido = suma((v) => v.sugerido);
+    return {
+      x, color, vs, ritmo, ritmo_obs: suma((v) => v.ritmo_obs), piezas: suma((v) => v.piezas), objetivo: suma((v) => v.objetivo),
+      enFull, casa, alcanza: ritmo > 0 ? (enFull + casa) / ritmo : null, sugerido,
+      motivo: sugerido > 0 ? "" : x.motivo && !x.motivo.startsWith("Stock suficiente") ? x.motivo : "Stock suficiente en todas las tallas de este color.",
+    };
+  })).sort((a, b) => b.piezas - a.piezas);
 
   return (
     <>
@@ -99,8 +115,21 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
           <div className="kpi"><div className="label">Presupuesto de compra</div><div className="value">{mxn(presupuesto)}</div><div className="sub">{Number(presuParam) > 0 ? "monto que escribiste" : Number(presuCfg.fijo) > 0 ? "monto fijo en Configuración" : `${pctPresu}% de lo depositado`}{totalFijos > 0 ? ` · gastos fijos ${mxn(totalFijos)}` : ""}</div></div>
           <div className="kpi"><div className="label">Pedido sugerido</div><div className="value">{mxn(res.total)}</div><div className="sub">{num(res.productos.reduce((a, x) => a + x.sugerido, 0))} piezas en {res.productos.length} productos</div></div>
           <div className="kpi"><div className="label">Utilidad esperada</div><div className="value">{mxn(res.utilidad)}</div><div className="sub">al vender ese pedido, con la utilidad neta real del periodo</div></div>
-          <div className="kpi"><div className="label">Cobertura objetivo</div><div className="value">{cobertura} días</div><div className="sub">{cobertura === coberturaCfg ? `${leadTime} de entrega + ${buffer} de colchón` : "prueba; la configurada es " + coberturaCfg}</div></div>
+          <div className="kpi"><div className="label">Cobertura objetivo</div><div className="value">{cobertura} días</div><div className="sub">{cobertura === coberturaCfg ? `${leadTime} de entrega + ${buffer} de colchón` : "prueba; la configurada es " + coberturaCfg}{cobertura < COBERTURA_TOP ? ` · top sellers ${COBERTURA_TOP} días` : ""}</div></div>
         </div>
+        {temporadas.length > 0 && (
+          <p className="notice" style={{ marginTop: 12 }}>
+            {temporadas.map((t, i) => {
+              const pedirAntes = addDays(t.desde, -leadTime);
+              return (
+                <span key={t.nombre + t.desde}>
+                  {i > 0 && " · "}<b>{t.nombre} ×{t.factor}</b> del {fechaCorta(t.desde)} al {fechaCorta(t.hasta)}: la venta de esos días ya se cuenta {t.factor === 2 ? "doble" : `×${t.factor}`} en el pedido
+                  {pedirAntes > hoy ? `; para tener el stock a tiempo pide a más tardar el ${fechaCorta(pedirAntes)}` : pedirAntes <= hoy && t.desde > hoy ? "; ya estás dentro del tiempo de entrega, pide hoy" : ""}.
+                </span>
+              );
+            })}
+          </p>
+        )}
         {presupuesto - res.total > 1000 && (
           <p className="notice" style={{ marginTop: 12, background: "var(--calm-bg)", color: "var(--calm)" }}>
             Con la cobertura de {cobertura} días te sobran {mxn(presupuesto - res.total)} del presupuesto: tienes stock suficiente en la mayoría de los productos. Puedes guardarlos o ver qué pedirías con más cobertura:
@@ -116,6 +145,38 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
           <span className="muted">· el porcentaje y los días se cambian en <Link href="/config">Configuración</Link></span>
         </form>
       </div>
+
+      {tops.length > 0 && (
+        <div className="card tight" style={{ marginBottom: 14 }}>
+          <h2>Top sellers <span className="muted">· tus {TOP_SELLERS} combinaciones de producto y color más vendidas: se cubren {coberturaTop} días de venta{temporadas.length > 0 ? ` (con ${temporadas.map((t) => `${t.nombre} ×${t.factor}`).join(", ")})` : ""} y reciben presupuesto antes que todo lo demás</span></h2>
+          <div className="tbl-wrap">
+            <table className="compact">
+              <thead><tr><th>Producto</th><th className="num">Vende/mes</th><th className="num">Venta a cubrir</th><th className="num">Stock (Full + bodega)</th><th className="num">Alcanza</th><th className="num">Pedir</th><th className="num">Costo</th><th className="num">Oro</th><th>Tallas a pedir</th><th>Mandar a Full desde bodega</th></tr></thead>
+              <tbody>
+                {tops.map((t) => {
+                  const aFull = t.vs.filter((v) => v.mandar_a_full);
+                  const gramos = t.x.fila.grams != null ? Number(t.x.fila.grams) * t.sugerido : 0;
+                  return (
+                    <tr key={`${t.x.fila.product_id}-${t.color}`}>
+                      <td><Link href={`/ventas/${t.x.fila.product_id}`}><b>{t.x.fila.producto}</b></Link>{t.color && <> · {t.color}</>}</td>
+                      <td className="num">{num(Math.round(t.ritmo_obs * 30))}{t.ritmo > t.ritmo_obs * 1.05 && <span className="muted"> ({num(Math.round(t.ritmo * 30))} con todas las tallas)</span>}</td>
+                      <td className="num">{num(t.objetivo)} pzas<span className="muted"> en {coberturaTop} días</span></td>
+                      <td className="num">{num(t.enFull)} + {num(t.casa)}</td>
+                      <td className="num">{t.alcanza != null ? `${num(Math.round(t.alcanza))} días` : "—"}</td>
+                      <td className="num"><b>{t.sugerido > 0 ? `${num(t.sugerido)} pzas` : "—"}</b></td>
+                      <td className="num">{t.sugerido > 0 ? mxn(t.sugerido * t.x.fila.costo_unitario) : "—"}</td>
+                      <td className="num">{gramos > 0 ? `${dec1(gramos)} g` : "—"}</td>
+                      <td>{t.sugerido > 0 ? tallasTexto(t.vs.filter((v) => v.sugerido > 0), (v) => v.sugerido) : <span className="muted">{t.motivo}</span>}</td>
+                      <td>{aFull.length > 0 ? <Link href={`/bodega#p${t.x.fila.product_id}`}>{tallasTexto(aFull, (v) => v.casa)}</Link> : <span className="muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ padding: "8px 18px" }}>Las tallas se calculan una por una: si sobran piezas en una talla no cubren otra que se está acabando. Solo cuenta el color top seller: los otros colores del mismo producto se piden con la cobertura normal ({cobertura} días) y después de los top sellers, en el pedido sugerido de abajo. Lo que tienes en bodega ya está descontado; si la talla está en cero en Full pero hay en bodega, aparece en &quot;Mandar a Full&quot; en vez de pedirse.</p>
+        </div>
+      )}
 
       {perdiendo.length > 0 && (
         <div className="card pendiente" style={{ marginBottom: 14 }}>
@@ -175,24 +236,33 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
         Cómo se corrige el ritmo: {haySnapshots
           ? "con la foto diaria de stock en Full se cuentan los días que cada talla estuvo en cero y se calcula piezas ÷ días con stock."
           : "la foto diaria de stock en Full empezó a guardarse hoy; mientras no haya 14 días de historia, una talla que hoy está en cero se considera agotada desde su última venta (piezas ÷ días con stock, máximo 3×). Cada semana la estimación será más exacta."}
-        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos − publicidad de Product Ads de cada publicación). El presupuesto se reparte primero a lo que más utilidad diaria deja y está por agotarse.
+        {" "}La utilidad por pieza es la real del periodo (recibido − oro − piedra − insumos − publicidad de Product Ads de cada publicación). Temporadas: Buen Fin cuenta ×2, del 1 al 14 de febrero y Hot Sale ×1.5; si el periodo de historia incluyó alguna, se descuenta para no inflar el ritmo. El presupuesto se reparte primero a los {TOP_SELLERS} más vendidos y después a lo que más utilidad diaria deja y está por agotarse.
       </p>
     </>
   );
 }
 
-function FilaPedido({ x, dias }: { x: ReturnType<typeof sugerirPedido>["productos"][number]; dias: number }) {
+/** "talla 11 ×14 · talla 12 ×12"; el color solo aparece si hay más de uno. */
+function tallasTexto(vs: VarianteSugerida[], cantidad: (v: VarianteSugerida) => number) {
+  const colores = new Set(vs.map((v) => v.color));
+  return [...vs].sort((a, b) => cantidad(b) - cantidad(a))
+    .map((v) => `${colores.size > 1 && v.color ? v.color + " " : ""}${v.talla ? "talla " + v.talla : "sin talla"} ×${num(cantidad(v))}`)
+    .join(" · ");
+}
+
+function FilaPedido({ x, dias }: { x: ProductoSugerido; dias: number }) {
   const f = x.fila;
   return (
     <details className="acc" style={{ margin: 0, borderTop: "1px solid var(--line)" }}>
       <summary>
         <span className="acc-title">
-          <b>{f.producto}</b>
+          <b>{f.producto}{x.top_seller && <span className="tag ok" style={{ marginLeft: 8 }}>top seller{x.colores_top.some(Boolean) ? ` en ${x.colores_top.join(", ")}` : ""}</span>}</b>
           <span className="muted">
             vende {dec1(x.ritmo_obs)}/día{x.ritmo > x.ritmo_obs * 1.05 ? ` (${dec1(x.ritmo)} con todas las tallas)` : ""} · utilidad {mxn(x.utilidad_pieza)}/pza · {f.roi != null ? `${dec1(f.roi * 100)}% sobre costo` : ""}
             {x.cobertura_dias != null ? ` · stock actual alcanza ${num(Math.round(x.cobertura_dias))} días` : ""}
             {x.demanda_bloqueada > 0 ? ` · ${pct(x.demanda_bloqueada)} de la demanda en tallas agotadas` : ""}
           </span>
+          <span style={{ fontSize: 12.5 }}>Pedir: {tallasTexto(x.variantes.filter((v) => v.sugerido > 0), (v) => v.sugerido)}</span>
         </span>
         <span className="acc-nums">
           <span><b>{num(x.sugerido)}</b><small>piezas</small></span>
@@ -206,7 +276,7 @@ function FilaPedido({ x, dias }: { x: ReturnType<typeof sugerirPedido>["producto
           <tbody>
             {x.variantes.filter((v) => v.piezas > 0 || v.sugerido > 0 || v.agotada).map((v) => (
               <tr key={`${v.variant_id}-${v.color}-${v.talla}`} className={v.sugerido > 0 ? "" : "dim"}>
-                <td>{v.color || "—"}</td>
+                <td>{v.color || "—"}{v.top_seller && <span className="tag ok" style={{ marginLeft: 6 }}>top</span>}</td>
                 <td>{v.talla || "—"}</td>
                 <td className="num">{num(v.piezas)}</td>
                 <td className="num">{v.dias_sin_stock > 0 ? `~${num(v.dias_sin_stock)}` : "0"}</td>
