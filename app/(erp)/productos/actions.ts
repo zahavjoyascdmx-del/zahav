@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { esBisuteria } from "@/lib/reporte";
 
 const numOrNull = (fd: FormData, k: string) => {
   const s = String(fd.get(k) ?? "").trim();
@@ -16,14 +17,15 @@ export async function actualizarProducto(fd: FormData) {
   if (!id) throw new Error("Producto inválido");
   const proveedor = String(fd.get("proveedor") ?? "").trim() || "Argollas";
   const kilates = String(fd.get("kilates") ?? "").trim() || null;
+  const category = String(fd.get("category") ?? "").trim() || null;
   const supabase = await createClient();
   const { error } = await supabase.from("products").update({
-    category: String(fd.get("category") ?? "").trim() || null,
+    category,
     kilates,
     grams: numOrNull(fd, "grams"),
     cost_fixed: numOrNull(fd, "cost_fixed") ?? 0,
     proveedor,
-    insumo_pieza: numOrNull(fd, "insumo_pieza") ?? 32,
+    insumo_pieza: numOrNull(fd, "insumo_pieza") ?? (esBisuteria(category) ? 0 : 32), // la bisutería no lleva caja
     stock_amazon: Math.round(numOrNull(fd, "stock_amazon") ?? 0),
     active: fd.get("active") === "on",
   }).eq("id", id);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, dec1, fechaCorta, mxn, num, pct, todayCdmx } from "@/lib/format";
-import { calcularFila, listaMeses, recalcularIndicadores, sugerirPedido, temporadasEn, COBERTURA_TOP, TOP_SELLERS, type FilaCalculada, type FilaReporte, type ProductoSugerido, type VarianteSugerida, type VarianteVenta } from "@/lib/reporte";
+import { BISUTERIA, calcularFila, esBisuteria, listaMeses, recalcularIndicadores, sugerirPedido, temporadasEn, COBERTURA_TOP, TOP_SELLERS, type FilaCalculada, type FilaReporte, type ProductoSugerido, type VarianteSugerida, type VarianteVenta } from "@/lib/reporte";
 
 export const dynamic = "force-dynamic";
 const RANGOS = [60, 90, 180];
@@ -75,7 +75,11 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
     for (const [k, v] of Object.entries(extra)) sp.set(k, String(v));
     return `/pedido?${sp.toString()}`;
   };
-  const res = sugerirPedido(filas, variantes, { dias, hoy, cobertura, presupuesto });
+  // La bisutería de volumen (China) no compite con ZAHAV por el presupuesto ni por los top sellers: se calcula aparte, sin tope.
+  const res = sugerirPedido(filas.filter((f) => !esBisuteria(f.categoria)), variantes, { dias, hoy, cobertura, presupuesto });
+  const filasBisu = filas.filter((f) => esBisuteria(f.categoria));
+  const resBisu = sugerirPedido(filasBisu, variantes, { dias, hoy, cobertura, presupuesto: Number.POSITIVE_INFINITY });
+  const bisu = resBisu.productos.concat(resBisu.excluidos).sort((a, b) => a.fila.sort_order - b.fila.sort_order);
 
   const perdiendo = res.productos.concat(res.excluidos).filter((x) => x.demanda_bloqueada > 0.15 && x.utilidad_pieza > 0).sort((a, b) => b.ritmo * b.demanda_bloqueada * b.utilidad_pieza - a.ritmo * a.demanda_bloqueada * a.utilidad_pieza).slice(0, 8);
   const utilidadDiariaPerdida = perdiendo.reduce((a, x) => a + x.ritmo * x.demanda_bloqueada * x.utilidad_pieza, 0);
@@ -208,6 +212,32 @@ export default async function PedidoPage({ searchParams }: { searchParams: Promi
         {res.productos.length === 0 && <p className="muted" style={{ padding: "0 18px 16px" }}>Con este presupuesto no alcanza para reponer nada, o no hay faltantes. Prueba con otro monto arriba.</p>}
         {res.productos.map((x) => <FilaPedido key={x.fila.product_id} x={x} dias={dias} />)}
       </div>
+
+      {bisu.length > 0 && (
+        <div className="card tight" style={{ marginBottom: 14 }}>
+          <h2>{BISUTERIA} <span className="muted">· proveedor China, aparte de ZAHAV: no usa el presupuesto de arriba ni cuenta como top seller · cubre {cobertura} días de venta · total {mxn(resBisu.total)}</span></h2>
+          <div className="tbl-wrap">
+            <table className="compact">
+              <thead><tr><th>Producto</th><th className="num">Vendidas</th><th className="num">Vende/mes</th><th className="num">Stock (Full + bodega)</th><th className="num">Alcanza</th><th className="num">Utilidad/pza</th><th className="num">Pedir</th><th className="num">Costo</th><th>Colores a pedir</th></tr></thead>
+              <tbody>
+                {bisu.map((x) => (
+                  <tr key={x.fila.product_id} className={x.fila.piezas === 0 ? "dim" : ""}>
+                    <td><Link href={`/ventas/${x.fila.product_id}`}><b>{x.fila.producto}</b></Link></td>
+                    <td className="num">{num(Math.round(x.fila.piezas))}</td>
+                    <td className="num">{num(Math.round(x.ritmo_obs * 30))}</td>
+                    <td className="num">{num(x.fila.stock_full + x.fila.stock_transito)} + {num(x.fila.stock_casa)}</td>
+                    <td className="num">{x.cobertura_dias != null ? `${num(Math.round(x.cobertura_dias))} días` : "—"}</td>
+                    <td className={`num ${x.utilidad_pieza < 0 ? "zero" : ""}`}>{mxn(x.utilidad_pieza)}</td>
+                    <td className="num"><b>{x.sugerido > 0 ? `${num(x.sugerido)} pzas` : "—"}</b></td>
+                    <td className="num">{x.sugerido > 0 ? mxn(x.costo_pedido) : "—"}</td>
+                    <td>{x.sugerido > 0 ? tallasTexto(x.variantes.filter((v) => v.sugerido > 0), (v) => v.sugerido) : <span className="muted">{x.motivo}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <details className="card tight acc">
         <summary><span className="acc-title"><b>Lo que no entra este mes</b><span className="muted">{res.excluidos.length} productos: stock suficiente, sin ventas, sin margen o sin presupuesto</span></span></summary>
