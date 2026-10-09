@@ -32,7 +32,7 @@ export default async function BodegaPage({ searchParams }: { searchParams: Promi
   const filtro = (q ?? "").trim().toLowerCase();
   const productos = ((prods.data ?? []) as Producto[])
     .filter((p) => !filtro || p.name.toLowerCase().includes(filtro))
-    .sort((a, b) => ordenSeccion(a.proveedor, a.kilates) - ordenSeccion(b.proveedor, b.kilates) || a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    .sort((a, b) => ordenSeccion(a.proveedor, a.kilates, a.category) - ordenSeccion(b.proveedor, b.kilates, b.category) || a.sort_order - b.sort_order || a.name.localeCompare(b.name));
   const porProducto = new Map<number, Var[]>();
   for (const v of (vars.data ?? []) as Var[]) porProducto.set(v.product_id, [...(porProducto.get(v.product_id) ?? []), v]);
 

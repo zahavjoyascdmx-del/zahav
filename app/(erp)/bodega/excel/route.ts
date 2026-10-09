@@ -11,21 +11,21 @@ const TALLAS = ["5", "5.5", "6", "6.5", "7", "7.5", "8", "8.5", "9", "9.5", "10"
 export async function GET() {
   const supabase = await createClient();
   const [prods, bodega, stock] = await Promise.all([
-    supabase.from("products").select("id,name,proveedor,kilates,stock_amazon,sort_order").eq("active", true),
+    supabase.from("products").select("id,name,category,proveedor,kilates,stock_amazon,sort_order").eq("active", true),
     supabase.from("stock_bodega").select("casa, variants(id,product_id,color,talla)"),
     supabase.rpc("stock_full_actual"),
   ]);
-  type P = { id: number; name: string; proveedor: string; kilates: string | null; stock_amazon: number; sort_order: number };
+  type P = { id: number; name: string; category: string | null; proveedor: string; kilates: string | null; stock_amazon: number; sort_order: number };
   type B = { casa: number; variants: { id: number; product_id: number; color: string; talla: string } | null };
   type S = { variant_id: number | null; product_id: number | null; color: string | null; talla: string | null; available: number };
-  const productos = ((prods.data ?? []) as P[]).sort((a, b) => ordenSeccion(a.proveedor, a.kilates) - ordenSeccion(b.proveedor, b.kilates) || a.sort_order - b.sort_order);
+  const productos = ((prods.data ?? []) as P[]).sort((a, b) => ordenSeccion(a.proveedor, a.kilates, a.category) - ordenSeccion(b.proveedor, b.kilates, b.category) || a.sort_order - b.sort_order);
   const casa = ((bodega.data ?? []) as unknown as B[]).filter((b) => b.variants);
   const full = (stock.data ?? []) as S[];
 
   const rows: (string | number)[][] = [];
   let seccion = "";
   for (const p of productos) {
-    const sec = tituloSeccion(p.proveedor, p.kilates);
+    const sec = tituloSeccion(p.proveedor, p.kilates, p.category);
     if (sec !== seccion) {
       seccion = sec;
       rows.push([]);

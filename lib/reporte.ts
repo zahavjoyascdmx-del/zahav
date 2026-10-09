@@ -81,14 +81,22 @@ export function totales(filas: FilaCalculada[]): Totales {
   return t;
 }
 
-/** Orden de las secciones, como en el Excel: 10k, 14k, plata, diamante, Bogos. */
+/**
+ * Bisutería de volumen (proveedor China): piezas baratas solo para generar ventas y bajar el % de reclamos.
+ * Va siempre aparte de lo de ZAHAV: su propia sección al final, sus propios totales y fuera del presupuesto de compra.
+ */
+export const BISUTERIA = "Bisutería (volumen)";
+export const esBisuteria = (categoria: string | null | undefined) => categoria === BISUTERIA;
+
+/** Orden de las secciones, como en el Excel: 10k, 14k, plata, diamante, Bogos; la bisutería al final. */
 export const ORDEN_PROVEEDOR = ["Argollas", "Dinasti", "Bogos", "Fabricación propia", "China"];
-export function ordenSeccion(proveedor: string, kilates: string | null) {
+export function ordenSeccion(proveedor: string, kilates: string | null, categoria?: string | null) {
+  if (esBisuteria(categoria)) return 10_000;
   const i = ORDEN_PROVEEDOR.indexOf(proveedor);
   return (i < 0 ? 99 : i) * 10 + (kilates === "10k" ? 0 : kilates === "14k" ? 1 : 2);
 }
-export const tituloSeccion = (proveedor: string, kilates: string | null) =>
-  proveedor === "China" ? "Plata / moissanita (China)" : kilates ? `${proveedor} · oro ${kilates}` : proveedor;
+export const tituloSeccion = (proveedor: string, kilates: string | null, categoria?: string | null) =>
+  esBisuteria(categoria) ? `${BISUTERIA} · ${proveedor}` : proveedor === "China" ? "Plata / moissanita (China)" : kilates ? `${proveedor} · oro ${kilates}` : proveedor;
 
 export type Meses = { mes: string; label: string }[];
 /** Últimos `cuantos` meses (YYYY-MM-01) hasta el mes de `hoy`, más reciente primero. */

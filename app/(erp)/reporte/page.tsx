@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { dec1, mxn, num, pct, todayCdmx } from "@/lib/format";
-import { calcularFila, listaMeses, mesAnterior, mesSiguiente, nombreMes, ordenSeccion, tituloSeccion, totales, type FilaCalculada, type FilaReporte } from "@/lib/reporte";
+import { BISUTERIA, calcularFila, esBisuteria, listaMeses, mesAnterior, mesSiguiente, nombreMes, ordenSeccion, tituloSeccion, totales, type FilaCalculada, type FilaReporte } from "@/lib/reporte";
 import { agregarGasto, borrarGasto, guardarOro } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,10 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
   const dirUtilidad = dirConCosto.reduce((a, d) => a + Number(d.precio_total), 0) - dirCosto;
   const conVentas = filas.filter((f) => f.piezas > 0 || f.stock_total > 0);
   const t = totales(filas);
+  // ZAHAV (oro, plata, diamante) y bisutería de volumen se reportan por separado
+  const filasBisu = filas.filter((f) => esBisuteria(f.categoria));
+  const tZahav = totales(filas.filter((f) => !esBisuteria(f.categoria)));
+  const tBisu = totales(filasBisu);
   const fijosCfg = ((cfg.data ?? []).find((r) => r.key === "gastos_fijos")?.value ?? {}) as Record<string, number>;
   // Si hay datos reales de Product Ads, la publicidad ya va dentro de la utilidad neta; el monto manual solo aplica a meses sin datos.
   const publicidadManual = hayPublicidad ? 0 : Number(fijosCfg.publicidad) || 0;
@@ -78,10 +82,10 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
   // Secciones como en el Excel
   const secciones = new Map<string, FilaCalculada[]>();
   for (const f of conVentas) {
-    const k = tituloSeccion(f.proveedor, f.kilates);
+    const k = tituloSeccion(f.proveedor, f.kilates, f.categoria);
     secciones.set(k, [...(secciones.get(k) ?? []), f]);
   }
-  const listaSecciones = [...secciones.entries()].sort((a, b) => ordenSeccion(a[1][0].proveedor, a[1][0].kilates) - ordenSeccion(b[1][0].proveedor, b[1][0].kilates));
+  const listaSecciones = [...secciones.entries()].sort((a, b) => ordenSeccion(a[1][0].proveedor, a[1][0].kilates, a[1][0].categoria) - ordenSeccion(b[1][0].proveedor, b[1][0].kilates, b[1][0].categoria));
   const sinCosto = filas.filter((f) => f.sin_costo && f.piezas > 0);
   const esMesActual = mes === meses[0].mes;
 
@@ -157,6 +161,32 @@ export default async function ReportePage({ searchParams }: { searchParams: Prom
           )}
         </div>
       </div>
+
+      {filasBisu.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h2>ZAHAV y bisutería por separado <span className="muted">· la bisutería de volumen (China) solo genera ventas y baja el % de reclamos; no se mezcla con lo de ZAHAV</span></h2>
+          <div className="tbl-wrap">
+            <table className="compact">
+              <thead><tr><th></th><th className="num">Piezas</th><th className="num">Ventas</th><th className="num">Te depositaron</th><th className="num">Gasto producto</th><th className="num">Insumos</th><th className="num">Publicidad</th><th className="num">Utilidad neta</th><th className="num">% de la venta</th><th className="num">Inventario a costo</th></tr></thead>
+              <tbody>
+                {([["ZAHAV (sin bisutería)", tZahav], [BISUTERIA, tBisu]] as const).map(([nombre, x]) => (
+                  <tr key={nombre}>
+                    <td><b>{nombre}</b></td>
+                    <td className="num">{num(x.piezas)}</td><td className="num">{mxn(x.venta)}</td><td className="num">{mxn(x.recibido)}</td><td className="num">{mxn(x.gastos)}</td>
+                    <td className="num">{mxn(x.insumos)}</td><td className="num">{mxn(x.publicidad)}</td><td className={`num ${x.utilidad_neta < 0 ? "zero" : ""}`}><b>{mxn(x.utilidad_neta)}</b></td>
+                    <td className="num">{x.venta > 0 ? pct(x.utilidad_neta / x.venta) : "—"}</td><td className="num">{mxn(x.valor_stock)}</td>
+                  </tr>
+                ))}
+                <tr className="total">
+                  <td>Total</td><td className="num">{num(t.piezas)}</td><td className="num">{mxn(t.venta)}</td><td className="num">{mxn(t.recibido)}</td><td className="num">{mxn(t.gastos)}</td>
+                  <td className="num">{mxn(t.insumos)}</td><td className="num">{mxn(t.publicidad)}</td><td className="num">{mxn(t.utilidad_neta)}</td><td className="num">{t.venta > 0 ? pct(t.utilidad_neta / t.venta) : "—"}</td><td className="num">{mxn(t.valor_stock)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ margin: "8px 0 0" }}>Los totales de arriba (Resultado del mes) incluyen las dos. Gastos fijos, otros cargos de ML y ventas directas no se reparten entre ZAHAV y bisutería.</p>
+        </div>
+      )}
 
       {listaSecciones.map(([titulo, lista]) => {
         const st = totales(lista);
