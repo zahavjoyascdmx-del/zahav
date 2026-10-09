@@ -51,3 +51,6 @@ select cron.schedule(
 alter table public.imagenes add column if not exists params jsonb not null default '{}'::jsonb;
 alter table public.imagenes alter column quality drop not null, alter column quality drop default;
 alter table public.imagenes alter column model set default 'alibaba/qwen-image-3/edit';
+
+-- Videos con cualquier modelo del catálogo (slug con "/"): parámetros extra por modelo.
+alter table public.videos add column if not exists params jsonb not null default '{}'::jsonb;

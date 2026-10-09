@@ -6,7 +6,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 type Json = Record<string, unknown>;
 type Video = {
   id: number; titulo: string; image_url: string; prompt: string; model: string; aspect_ratio: string; duration: number;
-  motion_id: string | null; seed: number | null; status: string; request_id: string | null; status_url: string | null;
+  motion_id: string | null; seed: number | null; params: Json | null; status: string; request_id: string | null; status_url: string | null;
   attempts: number; created_at: string; updated_at: string;
 };
 
@@ -78,10 +78,25 @@ async function generate(id: number): Promise<Json> {
   if (video.motion_id) input.motions = [{ id: video.motion_id, strength: 0.8 }];
   if (video.seed != null) input.seed = video.seed;
 
-  // La API espera el cuerpo envuelto en { params } (verificado); si algún día cambia, se reintenta sin envoltura.
-  let r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify({ params: input }) });
-  if (!r.ok && (r.status === 400 || r.status === 422) && /"loc":\["body","params"\]/.test(r.text)) {
-    r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify(input) });
+  let r;
+  if (video.model.includes("/")) {
+    // Modelo del catálogo (GET /models), p. ej. bytedance/seedance-2.5/reference-to-video o kling-video/v3.0/pro/image-to-video.
+    // image_urls[] para *reference-to-video / image-reference; image_url para *image-to-video. Extras (resolution, audio_urls...) en params.
+    const extra = (video.params ?? {}) as Json;
+    const body: Json = { prompt: video.prompt, duration: Number(video.duration) || 5, aspect_ratio: video.aspect_ratio || "9:16", ...extra };
+    if (/reference|image-reference/.test(video.model)) {
+      body.image_urls = (extra.image_urls as string[] | undefined) ?? [video.image_url];
+      if (/seedance/.test(video.model) && body.audio_urls === undefined) body.audio_urls = [];
+    } else {
+      body.image_url = video.image_url;
+    }
+    r = await hf("/" + video.model.replace(/^\//, ""), { method: "POST", body: JSON.stringify(body) });
+  } else {
+    // DoP clásico: la API espera el cuerpo envuelto en { params } (verificado); si algún día cambia, se reintenta sin envoltura.
+    r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify({ params: input }) });
+    if (!r.ok && (r.status === 400 || r.status === 422) && /"loc":\["body","params"\]/.test(r.text)) {
+      r = await hf("/v1/image2video/dop", { method: "POST", body: JSON.stringify(input) });
+    }
   }
   if (!r.ok) {
     const msg = explain(r.status, r.body, r.text);
