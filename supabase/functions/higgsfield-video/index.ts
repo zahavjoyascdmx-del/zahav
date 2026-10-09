@@ -344,10 +344,10 @@ Deno.serve(async (req: Request) => {
       if (!id) return json({ error: "Falta id" }, 400);
       result = await generateImage(id);
     } else if (action === "fetch") {
-      // Devuelve un archivo (imagen) en base64 para revisarlo desde fuera; máximo ~6 MB.
+      // Devuelve un archivo (imagen o video) en base64 para revisarlo desde fuera; máximo ~40 MB.
       const res = await fetch(String(body.url));
       const buf = new Uint8Array(await res.arrayBuffer());
-      if (buf.length > 6_000_000) return json({ error: "Archivo demasiado grande", bytes: buf.length }, 413);
+      if (buf.length > 40_000_000) return json({ error: "Archivo demasiado grande", bytes: buf.length }, 413);
       let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       result = { status: res.status, type: res.headers.get("content-type"), bytes: buf.length, base64: btoa(bin) };
     } else if (action === "test") {
