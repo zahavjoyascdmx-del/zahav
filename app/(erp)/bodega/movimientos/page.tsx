@@ -4,7 +4,7 @@ import { fechaCorta, fechaHora, num } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const KIND: Record<string, string> = { conteo: "Conteo", ajuste: "Ajuste", entrada: "Entrada", salida: "Salida", traslado_full: "A Full", venta_directa: "Venta directa" };
+const KIND: Record<string, string> = { conteo: "Conteo", ajuste: "Ajuste", entrada: "Entrada", salida: "Salida", traslado_full: "A Full", a_full: "A Full", venta_directa: "Venta directa" };
 
 export default async function MovimientosPage() {
   const supabase = await createClient();

@@ -47,6 +47,35 @@ export async function agregarTalla(fd: FormData) {
   redirect(`/bodega?ok=${productId}#p${productId}`);
 }
 
+/** Suma piezas que llegaron a la bodega (no reemplaza el conteo). Campos: entra__<variant_id>, nota. */
+export async function registrarEntrada(fd: FormData) {
+  const productId = Number(fd.get("product_id"));
+  const items: { variant_id: number; qty: number }[] = [];
+  for (const [k, v] of fd.entries()) {
+    if (!k.startsWith("entra__")) continue;
+    const id = Number(k.slice(7));
+    const qty = Math.max(0, Math.round(Number(String(v).replace(/[^0-9]/g, "")) || 0));
+    if (id && qty) items.push({ variant_id: id, qty });
+  }
+  if (!items.length) redirect(`/bodega?error=${encodeURIComponent("Escribe cuántas piezas entraron en cada talla")}#p${productId}`);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bodega_entrada", { p_items: items, p_nota: String(fd.get("nota") ?? "") });
+  if (error) throw new Error(error.message);
+  revalidar();
+  redirect(`/bodega?ok=${productId}&entrada=${data}#p${productId}`);
+}
+
+/** Deshace (o vuelve a aplicar) el descuento de un envío a Full tomado de Mercado Libre. */
+export async function ignorarEnvioFullMl(fd: FormData) {
+  const inbound = String(fd.get("inbound_id") ?? "");
+  const ignorar = fd.get("ignorar") === "1";
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bodega_ignorar_envio_full", { p_inbound_id: inbound, p_ignorar: ignorar });
+  if (error) redirect(`/bodega/envios-full?error=${encodeURIComponent(error.message)}`);
+  revalidar();
+  redirect(`/bodega/envios-full?ok=${encodeURIComponent(`Envío ${inbound}: ${ignorar ? "piezas devueltas a bodega" : "vuelto a descontar"}`)}`);
+}
+
 /** Deshace (o vuelve a aplicar) el descuento automático de un envío a Full. */
 export async function ignorarEnvioFull(fd: FormData) {
   const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
@@ -63,6 +92,7 @@ export async function ignorarEnvioFull(fd: FormData) {
 export async function aplicarEnviosFull() {
   const supabase = await createClient();
   await supabase.rpc("run_sync", { p_kind: "stock" });
+  await supabase.rpc("bodega_descontar_full");
   revalidar();
   redirect(`/bodega/envios-full?ok=1`);
 }
