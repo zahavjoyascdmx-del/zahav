@@ -20,7 +20,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
     supabase.from("gold_prices").select("proveedor,kilates,precio,mes").order("mes", { ascending: false }),
     supabase.from("products").select("category"),
   ]);
-  const rows = ((prods.data ?? []) as Producto[]).sort((a, b) => ordenSeccion(a.proveedor, a.kilates) - ordenSeccion(b.proveedor, b.kilates) || a.sort_order - b.sort_order);
+  const rows = ((prods.data ?? []) as Producto[]).sort((a, b) => ordenSeccion(a.proveedor, a.kilates, a.category) - ordenSeccion(b.proveedor, b.kilates, b.category) || a.sort_order - b.sort_order);
   const precios = (oro.data ?? []) as Oro[];
   const ultimo = (p: string, k: string | null) => (k ? precios.find((x) => x.proveedor === p && x.kilates === k)?.precio : undefined);
   const proveedores = [...new Set([...ORDEN_PROVEEDOR, ...rows.map((r) => r.proveedor)])];
