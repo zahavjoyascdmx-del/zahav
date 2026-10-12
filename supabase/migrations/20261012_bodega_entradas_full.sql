@@ -219,3 +219,23 @@ begin
   end if;
   return jsonb_build_object('inbound_id', v_id, 'descontado', p_descontar and not v_ya, 'piezas_descontadas', v_total, 'ya_estaba', v_ya, 'sin_mapear', v_sin_mapear);
 end $$;
+
+-- ---------------------------------------------------------------- registro de ingresos a Full (pestaña "Ingresos a Full")
+-- Lo que ML recibió en Full por envío y talla, con su estado frente a la bodega. Incluye los ajustes de ML ligados a un envío.
+create or replace view public.v_ingresos_full with (security_invoker = true) as
+select o.id as op_id, o.type, o.fecha, o.date_created, o.inbound_id, o.shipment_id, o.inventory_id, o.qty_available as piezas,
+  va.id as variant_id, p.id as product_id, p.name as producto, coalesce(va.color, '') as color, coalesce(va.talla, '') as talla,
+  e.descontado, e.ignorado,
+  case when o.type <> 'TRANSFER_DELIVERY' then 'ajuste'
+       when e.op_id is null and o.date_created < coalesce((select (value #>> '{}')::timestamptz from public.settings where key = 'bodega_full_desde'), now()) then 'antes_conteo'
+       when e.op_id is null then 'pendiente'
+       when e.ignorado then 'deshecho'
+       when e.descontado < o.qty_available then 'parcial'
+       else 'restado' end as estado
+from public.meli_stock_operations o
+left join public.meli_variations mv on mv.inventory_id = o.inventory_id
+left join public.meli_items mi on mi.inventory_id = o.inventory_id and mv.inventory_id is null
+left join public.variants va on va.id = coalesce(mv.variant_id, mi.variant_id)
+left join public.products p on p.id = va.product_id
+left join public.bodega_full_entregas e on e.op_id = o.id
+where o.type = 'TRANSFER_DELIVERY' or (o.type = 'ADJUSTMENT' and o.inbound_id is not null);

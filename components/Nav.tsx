@@ -12,6 +12,7 @@ const links = [
   { href: "/gastos", label: "Gastos y proveedores" },
   { href: "/stock", label: "Stock en Full" },
   { href: "/bodega", label: "Bodega" },
+  { href: "/ingresos-full", label: "Ingresos a Full" },
   { href: "/publicaciones", label: "Publicaciones" },
   { href: "/productos", label: "Catálogo" },
   { href: "/sync", label: "Sincronización" },
