@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { fechaCorta, num, todayCdmx } from "@/lib/format";
-import { aplicarEnviosFull, guardarColecta, ignorarLlegada } from "../bodega/actions";
+import { addDays, fechaCorta, num, todayCdmx } from "@/lib/format";
+import { aplicarEnviosFull, guardarColecta, ignorarLlegada, revisarAlertaFull } from "../bodega/actions";
 
 export const dynamic = "force-dynamic";
 
 type Ingreso = { fecha: string; inventory_id: string; variant_id: number | null; piezas: number };
 type Variante = { id: number; color: string; talla: string; products: { name: string } | null };
+type Alerta = { fecha: string; inventory_id: string; producto: string; color: string; talla: string; llegaron: number; bodega_antes: number; diferencia: number; revisada: boolean; nota: string | null };
 type EstadoBodega = { fecha: string; inventory_id: string; descontado: number; faltante: number; ignorado: boolean };
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -25,11 +26,13 @@ export default async function IngresosFullPage({ searchParams }: { searchParams:
   const mes = /^\d{4}-\d{2}$/.test(mesParam ?? "") ? mesParam! : hoy.slice(0, 7);
   const desdeMes = `${mes}-01`, hastaMes = finMes(mes);
   const supabase = await createClient();
-  const [ing, cfg, etiquetas, estados] = await Promise.all([
+  const [ing, cfg, etiquetas, estados, alr] = await Promise.all([
     supabase.rpc("full_ingresos", { p_desde: desdeMes, p_hasta: hastaMes }),
     supabase.from("settings").select("key,value").in("key", ["full_ingreso_minimo", "bodega_full_desde_fecha", "bodega_descuento_auto"]),
     supabase.from("full_llegadas").select("fecha,colecta").gte("fecha", desdeMes).lte("fecha", hastaMes),
     supabase.from("bodega_envios_full").select("fecha,inventory_id,descontado,faltante,ignorado").gte("fecha", desdeMes).lte("fecha", hastaMes),
+    // alertas: las del mes que se ve y las pendientes de los últimos 60 días
+    supabase.rpc("full_alertas", { p_desde: desdeMes < addDays(hoy, -60) ? desdeMes : addDays(hoy, -60), p_hasta: hastaMes > hoy ? hoy : hastaMes }),
   ]);
   if (ing.error) throw new Error(ing.error.message);
   const ingresos = (ing.data ?? []) as Ingreso[];
@@ -38,6 +41,9 @@ export default async function IngresosFullPage({ searchParams }: { searchParams:
   const desdeDescuento = String(ajuste("bodega_full_desde_fecha") ?? "");
   const auto = ajuste("bodega_descuento_auto") === true;
   const colectas = new Map(((etiquetas.data ?? []) as { fecha: string; colecta: string | null }[]).map((e) => [e.fecha, e.colecta]));
+  const todasAlertas = ((alr.data ?? []) as Alerta[]);
+  const alertas = todasAlertas.filter((a) => !a.revisada || (a.fecha >= desdeMes && a.fecha <= hastaMes));
+  const alertaDe = new Map(todasAlertas.map((a) => [`${a.fecha}|${a.inventory_id}`, a]));
   const estado = new Map(((estados.data ?? []) as EstadoBodega[]).map((e) => [`${e.fecha}|${e.inventory_id}`, e]));
 
   const ids = [...new Set(ingresos.map((i) => i.variant_id).filter((v): v is number => v != null))];
@@ -101,6 +107,42 @@ export default async function IngresosFullPage({ searchParams }: { searchParams:
         </div>
       </div>
 
+      {alertas.length > 0 && (
+        <div id="alertas" className="card tight" style={{ marginBottom: 14, borderColor: "var(--alarm)" }}>
+          <h2 style={{ padding: "14px 18px 0" }}>⚠ Llegadas que no cuadran con la bodega</h2>
+          <p className="muted" style={{ padding: "0 18px" }}>Llegaron a Full {`≥`} 3 piezas más de las que había en bodega en esa talla. Revisa si se etiquetó mal (por ejemplo, otro modelo con la etiqueta de este) o si faltó registrar una entrada. Al revisarla, anota qué pasó.</p>
+          <div className="tbl-wrap">
+            <table className="compact">
+              <thead><tr><th>Llegó</th><th>Producto</th><th>Color</th><th>Talla</th><th className="num">Llegaron</th><th className="num">En bodega antes</th><th>Revisión</th></tr></thead>
+              <tbody>
+                {alertas.map((a) => (
+                  <tr key={`${a.fecha}|${a.inventory_id}`}>
+                    <td><a href={`/ingresos-full?mes=${a.fecha.slice(0, 7)}#d${a.fecha}`}>{fechaCorta(a.fecha)}</a></td>
+                    <td><b>{a.producto}</b></td><td>{a.color || "—"}</td><td>{a.talla || "—"}</td>
+                    <td className="num"><b>{num(a.llegaron)}</b></td><td className="num zero">{num(a.bodega_antes)}</td>
+                    <td>
+                      {a.revisada ? (
+                        <form action={revisarAlertaFull} className="inline">
+                          <input type="hidden" name="fecha" value={a.fecha} /><input type="hidden" name="inventory_id" value={a.inventory_id} /><input type="hidden" name="reabrir" value="1" />
+                          <span className="tag ok">revisada</span><span className="muted">{a.nota}</span>
+                          <button className="btn small secondary" type="submit">Reabrir</button>
+                        </form>
+                      ) : (
+                        <form action={revisarAlertaFull} className="inline">
+                          <input type="hidden" name="fecha" value={a.fecha} /><input type="hidden" name="inventory_id" value={a.inventory_id} />
+                          <input name="nota" placeholder="Qué pasó (p. ej. 10 eran Torzal, se retiraron)" style={{ width: 260 }} />
+                          <button className="btn small" type="submit">Marcar revisada</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="chips" style={{ marginBottom: 10 }}>
         <Link className={`chip ${vista === "llegada" ? "active" : ""}`} href={href(mes, "llegada")}>Por llegada</Link>
         <Link className={`chip ${vista === "talla" ? "active" : ""}`} href={href(mes, "talla")}>Por producto y talla</Link>
@@ -152,7 +194,7 @@ export default async function IngresosFullPage({ searchParams }: { searchParams:
                     const e = estado.get(`${d.fecha}|${i.inventory_id}`);
                     return (
                       <tr key={i.inventory_id}>
-                        <td>{i.variant_id == null ? <span className="tag warn">{x.producto}</span> : x.producto}</td>
+                        <td>{i.variant_id == null ? <span className="tag warn">{x.producto}</span> : x.producto}{alertaDe.has(`${d.fecha}|${i.inventory_id}`) && <span className="tag warn" style={{ marginLeft: 6 }}>⚠ en bodega había {num(alertaDe.get(`${d.fecha}|${i.inventory_id}`)!.bodega_antes)}</span>}</td>
                         <td>{x.color || "—"}</td><td>{x.talla || "—"}</td>
                         <td className="num"><b>{num(i.piezas)}</b></td>
                         {cuenta && <td className={`num ${e && e.faltante > 0 ? "zero" : ""}`}>{num(e?.descontado ?? 0)}{e && e.faltante > 0 ? <span className="muted"> (faltaron {num(e.faltante)})</span> : null}</td>}

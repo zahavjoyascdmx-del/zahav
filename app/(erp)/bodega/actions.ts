@@ -76,6 +76,25 @@ export async function ignorarLlegada(fd: FormData) {
   redirect(`/ingresos-full?mes=${fecha.slice(0, 7)}#d${fecha}`);
 }
 
+/** Marca como revisada una alerta de ingreso a Full (o la vuelve a abrir), con una nota de qué pasó. */
+export async function revisarAlertaFull(fd: FormData) {
+  const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
+  const inventory_id = String(fd.get("inventory_id") ?? "");
+  const supabase = await createClient();
+  if (fd.get("reabrir") === "1") {
+    const { error } = await supabase.from("full_alertas_revisadas").delete().eq("fecha", fecha).eq("inventory_id", inventory_id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { data: u } = await supabase.auth.getUser();
+    const { error } = await supabase.from("full_alertas_revisadas").upsert({
+      fecha, inventory_id, nota: String(fd.get("nota") ?? "").trim() || null, revisado_por: u.user?.email ?? null, revisado_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+  }
+  for (const p of ["/", "/bodega", "/ingresos-full"]) revalidatePath(p);
+  redirect(`/ingresos-full?mes=${fecha.slice(0, 7)}#alertas`);
+}
+
 /** Guarda el número de colecta de Mercado Libre que corresponde a un día de llegada. */
 export async function guardarColecta(fd: FormData) {
   const fecha = String(fd.get("fecha") ?? "").slice(0, 10);

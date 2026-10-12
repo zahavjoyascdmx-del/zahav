@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { AlertasFull } from "@/components/AlertasFull";
 import { addDays, fechaCorta, mxn, num, todayCdmx } from "@/lib/format";
 import { ordenSeccion } from "@/lib/reporte";
 import { agregarTalla, guardarBodega, registrarEntrada } from "./actions";
@@ -60,6 +61,7 @@ export default async function BodegaPage({ searchParams }: { searchParams: Promi
           {q && <Link href="/bodega" className="chip">Ver todos</Link>}
         </form>
       </div>
+      <AlertasFull />
       {ok && <p className="notice" style={{ background: "var(--calm-bg)", color: "var(--calm)", marginBottom: 14 }}>{entrada ? `Entrada registrada: ${entrada} piezas sumadas a la bodega.` : "Stock guardado."}</p>}
       {error && <p className="error" style={{ marginBottom: 14 }}>{error}</p>}
 
