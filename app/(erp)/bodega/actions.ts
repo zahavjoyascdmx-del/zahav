@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-const revalidar = () => { for (const p of ["/bodega", "/pedido", "/reporte", "/productos", "/stock"]) revalidatePath(p); };
+const revalidar = () => { for (const p of ["/bodega", "/pedido", "/reporte", "/productos", "/stock", "/ingresos-full"]) revalidatePath(p); };
 
 /** Guarda el stock en bodega de todas las tallas de un producto. Campos: casa__<variant_id>, amazon. */
 export async function guardarBodega(fd: FormData) {
@@ -65,15 +65,26 @@ export async function registrarEntrada(fd: FormData) {
   redirect(`/bodega?ok=${productId}&entrada=${data}#p${productId}`);
 }
 
-/** Deshace (o vuelve a aplicar) el descuento de un envío a Full tomado de Mercado Libre. */
-export async function ignorarEnvioFullMl(fd: FormData) {
-  const inbound = String(fd.get("inbound_id") ?? "");
+/** Deshace (devuelve a bodega) o vuelve a aplicar el descuento de una llegada a Full (un día). */
+export async function ignorarLlegada(fd: FormData) {
+  const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
   const ignorar = fd.get("ignorar") === "1";
   const supabase = await createClient();
-  const { error } = await supabase.rpc("bodega_ignorar_envio_full", { p_inbound_id: inbound, p_ignorar: ignorar });
-  if (error) redirect(`/bodega/envios-full?error=${encodeURIComponent(error.message)}`);
+  const { error } = await supabase.rpc("bodega_ignorar_llegada", { p_fecha: fecha, p_ignorar: ignorar });
+  if (error) throw new Error(error.message);
   revalidar();
-  redirect(`/bodega/envios-full?ok=${encodeURIComponent(`Envío ${inbound}: ${ignorar ? "piezas devueltas a bodega" : "vuelto a descontar"}`)}`);
+  redirect(`/ingresos-full?mes=${fecha.slice(0, 7)}#d${fecha}`);
+}
+
+/** Guarda el número de colecta de Mercado Libre que corresponde a un día de llegada. */
+export async function guardarColecta(fd: FormData) {
+  const fecha = String(fd.get("fecha") ?? "").slice(0, 10);
+  const colecta = String(fd.get("colecta") ?? "").replace(/[^0-9]/g, "") || null;
+  const supabase = await createClient();
+  const { error } = await supabase.from("full_llegadas").upsert({ fecha, colecta, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+  revalidatePath("/ingresos-full");
+  redirect(`/ingresos-full?mes=${fecha.slice(0, 7)}#d${fecha}`);
 }
 
 /** Deshace (o vuelve a aplicar) el descuento automático de un envío a Full. */
@@ -92,9 +103,9 @@ export async function ignorarEnvioFull(fd: FormData) {
 export async function aplicarEnviosFull() {
   const supabase = await createClient();
   await supabase.rpc("run_sync", { p_kind: "stock" });
-  await supabase.rpc("bodega_descontar_full");
+  await supabase.rpc("bodega_aplicar_envios_full");
   revalidar();
-  redirect(`/bodega/envios-full?ok=1`);
+  redirect(`/ingresos-full`);
 }
 
 /** Importa el CSV de detalle de una colecta (Envíos a Full de Mercado Libre) y descuenta la bodega. */
