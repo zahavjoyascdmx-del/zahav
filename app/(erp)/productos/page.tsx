@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { mxn, num } from "@/lib/format";
 import { ORDEN_PROVEEDOR, ordenSeccion } from "@/lib/reporte";
 import { actualizarProducto } from "./actions";
+import { BuscarFilas } from "@/components/BuscarFilas";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,10 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
       {ok && <p className="notice" style={{ background: "var(--calm-bg)", color: "var(--calm)", marginBottom: 14 }}>Producto guardado. Reporte y pedido recalculados.</p>}
       <datalist id="proveedores">{proveedores.map((p) => <option key={p} value={p} />)}</datalist>
       <datalist id="categorias">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
+      <BuscarFilas tabla="catalogo" placeholder="Buscar producto, categoría, proveedor o kilates…" />
       <div className="card tight">
         <div className="tbl-wrap">
-          <table className="compact editable">
+          <table id="catalogo" className="compact editable">
             <thead>
               <tr>
                 <th>Producto</th><th>Categoría</th><th>Proveedor</th><th>Kilates</th><th className="num">Gramos</th><th className="num">Costo fijo</th><th className="num">Costo hoy</th>
@@ -54,7 +56,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
                 const costo = (p.grams != null && precio ? Number(p.grams) * precio : 0) + Number(p.cost_fixed ?? 0);
                 const formId = `f${p.id}`;
                 return (
-                  <tr key={p.id} className={p.active ? "" : "dim"}>
+                  <tr key={p.id} className={p.active ? "" : "dim"} data-q={[p.name, p.category, p.proveedor, p.kilates, p.active ? "activo" : "inactivo"].filter(Boolean).join(" ")}>
                     <td>
                       <form id={formId} action={actualizarProducto}><input type="hidden" name="id" value={p.id} /></form>
                       <b>{p.name}</b>
