@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ConfigPage({ searchParams }: { searchParams: Promise<{ ok?: string }> }) {
   const { ok } = await searchParams;
   const supabase = await createClient();
-  const { data } = await supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days"]);
+  const { data } = await supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days", "margen_objetivo"]);
   const get = (k: string) => (data ?? []).find((r) => r.key === k)?.value;
   const negocio = (get("negocio") ?? {}) as Partial<Negocio>;
   const fijos = (get("gastos_fijos") ?? {}) as Record<string, number>;
@@ -51,6 +51,11 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
               <label>Días que tarda el proveedor en entregar<input name="lead_time_days" type="number" step="1" min="1" defaultValue={Number(get("lead_time_days") ?? 30)} /></label>
               <label>Días de colchón de stock<input name="buffer_days" type="number" step="1" min="0" defaultValue={Number(get("buffer_days") ?? 30)} /></label>
             </div>
+            <h2 style={{ marginTop: 18 }}>Margen objetivo</h2>
+            <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+              <label>Lo que te debe quedar de ML por cada peso de costo<input name="margen_objetivo" type="number" step="0.05" min="1" defaultValue={Number(((get("margen_objetivo") ?? {}) as { valor?: number }).valor ?? 1.8)} /></label>
+            </div>
+            <p className="muted">1.8 quiere decir: si la pieza te cuesta 1,000, Mercado Libre te debe dejar al menos 1,800 ya sin comisiones ni retenciones. Se usa en la pantalla Precios y margen.</p>
             <p className="muted">Ejemplo: si te depositan $600,000 al mes y reinviertes 60%, el pedido sugerido no pasará de $360,000.</p>
             <button className="btn" type="submit">Guardar</button>
           </div>
