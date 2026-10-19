@@ -19,10 +19,12 @@ export async function guardarNegocio(fd: FormData) {
     { key: "presupuesto", value: { pct_recibido: n("pct_recibido") || 60, fijo: n("presupuesto_fijo") }, updated_at: now },
     { key: "lead_time_days", value: n("lead_time_days") || 30, updated_at: now },
     { key: "buffer_days", value: n("buffer_days") || 30, updated_at: now },
+    { key: "margen_objetivo", value: { valor: Number(v("margen_objetivo").replace(",", ".")) || 1.8 }, updated_at: now },
   ]);
   if (error) throw new Error(error.message);
   revalidatePath("/config");
   revalidatePath("/reporte");
   revalidatePath("/pedido");
+  revalidatePath("/precios");
   redirect("/config?ok=1");
 }

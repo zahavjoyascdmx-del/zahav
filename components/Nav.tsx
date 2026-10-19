@@ -12,6 +12,7 @@ const links = [
   { href: "/stock", label: "Stock en Full" },
   { href: "/bodega", label: "Bodega" },
   { href: "/publicaciones", label: "Publicaciones" },
+  { href: "/precios", label: "Precios y margen" },
   { href: "/productos", label: "Catálogo" },
   { href: "/sync", label: "Sincronización" },
   { href: "/config", label: "Configuración" },
