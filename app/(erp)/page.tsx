@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { AlertaComisiones } from "@/components/AlertaComisiones";
 import { AlertasFull } from "@/components/AlertasFull";
 import { Kpi } from "@/components/Kpi";
 import { addDays, fechaCorta, fechaHora, mxn, num, todayCdmx } from "@/lib/format";
@@ -32,6 +33,7 @@ export default async function Home() {
 
   return (
     <>
+      <AlertaComisiones />
       <AlertasFull />
       <div className="page-head">
         <div>
