@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { mxn, num } from "@/lib/format";
-import { agregarLiquidacion, quitarLiquidacion } from "./actions";
+import { fechaCorta, mxn, num } from "@/lib/format";
+import { agregarLiquidacion, liquidarSugerido, posponerLiquidacion, quitarLiquidacion } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,10 @@ type Fila = {
   margen_rev: number | null; margen_dir: number | null; utilidad_pz: number | null; cumple: boolean | null;
   min_reventa: number | null; min_lista_directa: number | null;
 };
+type Sugerida = {
+  product_id: number; producto: string; color: string; desde: string; stock: number; vendidas: number; pct: number;
+  costo_u: number; valor_costo: number; dias: number; umbral: number; pospuesta_hasta: string | null; alerta: boolean;
+};
 type Regla = { id: number; product_id: number; color: string | null; nota: string | null; products: { name: string } | null };
 
 const DIAS = [30, 60, 90];
@@ -23,11 +27,12 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
   const { dias: diasParam, ok, error: errorParam } = await searchParams;
   const dias = DIAS.includes(Number(diasParam)) ? Number(diasParam) : 60;
   const supabase = await createClient();
-  const [res, cfg, reglasRes, prods] = await Promise.all([
+  const [res, cfg, reglasRes, prods, sugRes] = await Promise.all([
     supabase.rpc("margenes_productos", { p_dias: dias }),
     supabase.from("settings").select("key,value").in("key", ["margen_objetivo", "margen_liquidacion", "utilidad_minima_pz"]),
     supabase.from("liquidaciones").select("id,product_id,color,nota,products(name)").order("id"),
     supabase.from("products").select("id,name").eq("active", true).order("sort_order"),
+    supabase.rpc("liquidacion_sugerida"),
   ]);
   if (res.error) throw new Error(res.error.message);
   const setting = (k: string, d: number) => Number(((cfg.data ?? []).find((r) => r.key === k)?.value as { valor?: number } | undefined)?.valor ?? d) || d;
@@ -40,6 +45,11 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
     return ma - mb;
   });
   const reglas = ((reglasRes.data ?? []) as unknown as Regla[]);
+  const sugeridas = (sugRes.data ?? []) as Sugerida[];
+  const aLiquidar = sugeridas.filter((s) => s.alerta);
+  const pospuestas = sugeridas.filter((s) => s.pospuesta_hasta && Number(s.pct) < Number(s.umbral) && !s.alerta);
+  const liqDias = sugeridas[0]?.dias ?? 60;
+  const liqPct = Number(sugeridas[0]?.umbral ?? 10);
 
   const conDato = filas.filter((f) => f.margen_rev != null);
   const bajos = conDato.filter((f) => f.cumple === false);
@@ -125,6 +135,46 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
             </tbody>
           </table>
         </div>
+      </div>
+
+
+      <div className="card tight" id="liquidacion-sugerida" style={{ marginTop: 14 }}>
+        <h2>Para poner en liquidación <span className="muted">· en los últimos {liqDias} días vendieron menos del {liqPct}% de su stock</span></h2>
+        <p className="muted" style={{ margin: "0 0 8px" }}>
+          % vendido = piezas vendidas en {liqDias} días ÷ (vendidas + stock de hoy en Full, tránsito y bodega). Menos de {liqPct}% en {liqDias} días quiere decir que, a ese ritmo, tienes stock para más de {Math.round((liqDias / 30) * (100 - liqPct) / liqPct)} meses.
+          No se cuentan productos publicados hace menos de {liqDias} días ni los que ya están en liquidación. Cambia los días y el % en <Link href="/config">Configuración</Link>.
+        </p>
+        {aLiquidar.length === 0 ? <p className="muted">Nada por ahora: todo vende a buen ritmo.</p> : (
+          <div className="tbl-wrap">
+            <table className="compact">
+              <thead><tr><th>Producto</th><th className="num">Stock</th><th className="num">Vendidas {liqDias} días</th><th className="num">% vendido</th><th className="num">Detenido a costo</th><th></th></tr></thead>
+              <tbody>
+                {aLiquidar.map((s) => (
+                  <tr key={`${s.product_id}-${s.color}`}>
+                    <td><div style={{ fontWeight: 600 }}>{s.producto}{s.color ? ` · ${s.color}` : ""}</div><div className="muted">se vende desde {fechaCorta(s.desde)}</div></td>
+                    <td className="num">{num(s.stock)}</td>
+                    <td className="num">{num(s.vendidas)}</td>
+                    <td className="num zero">{Number(s.pct).toFixed(1)}%</td>
+                    <td className="num">{Number(s.valor_costo) > 0 ? mxn(s.valor_costo) : "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <form action={liquidarSugerido} style={{ display: "inline" }}>
+                        <input type="hidden" name="product_id" value={s.product_id} /><input type="hidden" name="color" value={s.color} />
+                        <button className="btn" type="submit">Poner en liquidación</button>
+                      </form>{" "}
+                      <form action={posponerLiquidacion} style={{ display: "inline" }}>
+                        <input type="hidden" name="product_id" value={s.product_id} /><input type="hidden" name="color" value={s.color} /><input type="hidden" name="dias" value={30} />
+                        <button className="btn ghost" type="submit">Recordar en 30 días</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {pospuestas.length > 0 && (
+          <p className="muted" style={{ marginTop: 8 }}>Pospuestos: {pospuestas.map((s) => `${s.producto}${s.color ? ` ${s.color}` : ""} (hasta ${fechaCorta(s.pospuesta_hasta!)})`).join(", ")}.</p>
+        )}
       </div>
 
       <div className="grid grid-2" style={{ marginTop: 14 }}>
