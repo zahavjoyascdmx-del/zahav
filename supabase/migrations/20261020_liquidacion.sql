@@ -106,3 +106,47 @@ language sql stable set search_path to 'public' as $$
   left join agg d on d.product_id = g.product_id and d.liquidacion = g.liquidacion and d.modo = 'directa'
   where pb.n > 0 or g.liquidacion;
 $$;
+
+-- Contracargos (charged_back): mientras están "in_process" el dinero sigue contado pero marcado en disputa, igual que una mediación.
+-- Antes se tomaban como 0 y hacían ver ventas con utilidad negativa (caso Roma).
+create or replace view public.v_pagos as
+select payment_id, order_id, status, date_approved, transaction_amount, net_received_amount, ret_iva, ret_isr, fee_meli, fee_mp, fee_envio, cupon,
+  jsonb_array_length(charges) > 0 as con_cargos, charges,
+  coalesce((raw->>'transaction_amount_refunded')::numeric, 0) as reembolsado,
+  status in ('in_mediation', 'charged_back') as en_disputa,
+  case
+    when status in ('refunded', 'cancelled', 'rejected') then 0
+    when coalesce((raw->>'transaction_amount_refunded')::numeric, 0) > 0 and coalesce(transaction_amount, 0) > 0
+      then greatest(0, coalesce(net_received_amount, 0) * (1 - (raw->>'transaction_amount_refunded')::numeric / transaction_amount))
+    else net_received_amount
+  end as neto_efectivo
+from public.meli_payments p;
+
+create or replace function public.pending_payments(p_limit integer default 300)
+returns table(order_id bigint, payment_id bigint)
+language sql security definer set search_path to 'public' as $$
+  select x.order_id, x.payment_id from (
+    select o.order_id, pid as payment_id, o.date_created
+    from public.meli_orders o
+    cross join lateral unnest(o.payment_ids) as pid
+    left join public.meli_payments mp on mp.payment_id = pid
+    where o.status in ('paid', 'partially_refunded')
+      and (mp.payment_id is null
+        or (mp.charges = '[]'::jsonb and o.date_created > now() - interval '7 days' and mp.synced_at < now() - interval '3 hours'))
+    union
+    select o.order_id, mp.payment_id, o.date_created
+    from public.meli_orders o
+    join public.meli_payments mp on mp.order_id = o.order_id
+    where o.status in ('paid', 'partially_refunded')
+      and ((mp.status in ('approved', 'pending', 'authorized') and o.date_created > now() - interval '45 days' and mp.synced_at < now() - interval '24 hours')
+        or (mp.status in ('in_mediation', 'charged_back') and mp.synced_at < now() - interval '24 hours'))
+    union
+    select o.order_id, mp.payment_id, o.date_created
+    from public.meli_orders o
+    join public.meli_payments mp on mp.order_id = o.order_id
+    where o.status = 'cancelled' and mp.status = 'approved'
+      and o.date_created > now() - interval '60 days' and mp.synced_at < now() - interval '12 hours'
+  ) x
+  order by x.date_created desc
+  limit p_limit;
+$$;
