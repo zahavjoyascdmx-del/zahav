@@ -23,6 +23,8 @@ export async function guardarNegocio(fd: FormData) {
     { key: "margen_liquidacion", value: { valor: Number(v("margen_liquidacion").replace(",", ".")) || 1.15 }, updated_at: now },
     { key: "utilidad_minima_pz", value: { valor: n("utilidad_minima_pz") || 1100 }, updated_at: now },
     { key: "margen_reducido", value: { valor: Number(v("margen_reducido").replace(",", ".")) || 1.4 }, updated_at: now },
+    { key: "liquidacion_dias", value: { valor: n("liquidacion_dias") || 60 }, updated_at: now },
+    { key: "liquidacion_pct", value: { valor: n("liquidacion_pct") || 10 }, updated_at: now },
   ]);
   if (error) throw new Error(error.message);
   revalidatePath("/config");
