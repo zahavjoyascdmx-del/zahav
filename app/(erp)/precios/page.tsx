@@ -25,7 +25,7 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
   const supabase = await createClient();
   const [res, cfg, reglasRes, prods] = await Promise.all([
     supabase.rpc("margenes_productos", { p_dias: dias }),
-    supabase.from("settings").select("key,value").in("key", ["margen_objetivo", "margen_liquidacion", "utilidad_minima_pz"]),
+    supabase.from("settings").select("key,value").in("key", ["margen_objetivo", "margen_liquidacion", "utilidad_minima_pz", "margen_reducido"]),
     supabase.from("liquidaciones").select("id,product_id,color,nota,products(name)").order("id"),
     supabase.from("products").select("id,name").eq("active", true).order("sort_order"),
   ]);
@@ -33,7 +33,8 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
   const setting = (k: string, d: number) => Number(((cfg.data ?? []).find((r) => r.key === k)?.value as { valor?: number } | undefined)?.valor ?? d) || d;
   const objetivo = setting("margen_objetivo", 1.8);
   const objetivoLiq = setting("margen_liquidacion", 1.15);
-  const utilMin = setting("utilidad_minima_pz", 1500);
+  const utilMin = setting("utilidad_minima_pz", 1100);
+  const objetivoRed = setting("margen_reducido", 1.4);
   const filas = ((res.data ?? []) as Fila[]).sort((a, b) => {
     const ma = a.margen_rev != null ? Number(a.margen_rev) / Number(a.objetivo) : a.margen_dir != null ? Number(a.margen_dir) / Number(a.objetivo) : 99;
     const mb = b.margen_rev != null ? Number(b.margen_rev) / Number(b.objetivo) : b.margen_dir != null ? Number(b.margen_dir) / Number(b.objetivo) : 99;
@@ -56,10 +57,10 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
     <>
       <div className="page-head">
         <div>
-          <h1>Precios y margen <span className="muted">· objetivo {objetivo.toFixed(2)}× · liquidación {objetivoLiq.toFixed(2)}× · o más de {mxn(utilMin)} por pieza</span></h1>
+          <h1>Precios y margen <span className="muted">· objetivo {objetivo.toFixed(2)}× · liquidación {objetivoLiq.toFixed(2)}× · {objetivoRed.toFixed(2)}× si deja más de {mxn(utilMin)} por pieza</span></h1>
           <div className="muted">
             Margen = lo que te deja Mercado Libre por pieza (ya sin comisión, envío ni retenciones) ÷ costo de la pieza (gramaje × oro de hoy + piedra o pieza).
-            Un producto cumple si llega al objetivo, o si ya deja más de {mxn(utilMin)} por pieza. Los que están en liquidación solo necesitan {objetivoLiq.toFixed(2)}×. Cambia los números en <Link href="/config">Configuración</Link>.
+            Un producto cumple si llega al objetivo, o si ya deja más de {mxn(utilMin)} por pieza y llega al menos a {objetivoRed.toFixed(2)}×. Los que están en liquidación solo necesitan {objetivoLiq.toFixed(2)}×. Cambia los números en <Link href="/config">Configuración</Link>.
           </div>
         </div>
       </div>
@@ -152,7 +153,7 @@ export default async function PreciosPage({ searchParams }: { searchParams: Prom
           <ul>
             <li><b>Reventa.</b> Lo que te queda no depende de tu precio de lista: es lo que Mercado Libre decide pagarte por pieza. En Mercado Libre → Publicaciones → Reventa, compara el precio de compra que te ofrece cada publicación con la columna "Mínimo a aceptar en reventa". Si paga menos, saca esa publicación de reventa o pide un precio mayor si la pantalla lo permite.</li>
             <li><b>Venta directa.</b> Ahí manda tu precio de lista: te queda cerca del 72% después de comisión, envío Full y retenciones. Pon el precio de lista al menos en la columna "Precio de lista mínimo".</li>
-            <li><b>Regla de utilidad.</b> Si una pieza ya deja más de {mxn(utilMin)}, cuenta como buena aunque el margen sea menor al objetivo; por eso el mínimo de los anillos caros es costo + {mxn(utilMin)}.</li>
+            <li><b>Regla de utilidad.</b> Si una pieza ya deja más de {mxn(utilMin)}, basta con margen {objetivoRed.toFixed(2)}× en vez de {objetivo.toFixed(2)}×; por eso el mínimo de las piezas caras es el mayor entre {objetivoRed.toFixed(2)} × costo y costo + {mxn(utilMin)}.</li>
             <li>Los márgenes son antes de publicidad, cargos de Full, insumos y gastos fijos. El costo usa el oro de hoy: captura el precio del oro del mes para que sea exacto.</li>
           </ul>
         </div>
