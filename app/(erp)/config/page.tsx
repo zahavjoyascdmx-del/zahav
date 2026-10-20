@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ConfigPage({ searchParams }: { searchParams: Promise<{ ok?: string }> }) {
   const { ok } = await searchParams;
   const supabase = await createClient();
-  const { data } = await supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days", "margen_objetivo"]);
+  const { data } = await supabase.from("settings").select("key,value").in("key", ["negocio", "gastos_fijos", "presupuesto", "lead_time_days", "buffer_days", "margen_objetivo", "margen_liquidacion", "utilidad_minima_pz"]);
   const get = (k: string) => (data ?? []).find((r) => r.key === k)?.value;
   const negocio = (get("negocio") ?? {}) as Partial<Negocio>;
   const fijos = (get("gastos_fijos") ?? {}) as Record<string, number>;
@@ -54,8 +54,10 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
             <h2 style={{ marginTop: 18 }}>Margen objetivo</h2>
             <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
               <label>Lo que te debe quedar de ML por cada peso de costo<input name="margen_objetivo" type="number" step="0.05" min="1" defaultValue={Number(((get("margen_objetivo") ?? {}) as { valor?: number }).valor ?? 1.8)} /></label>
+              <label>Margen para productos en liquidación<input name="margen_liquidacion" type="number" step="0.05" min="1" defaultValue={Number(((get("margen_liquidacion") ?? {}) as { valor?: number }).valor ?? 1.15)} /></label>
+              <label>Utilidad por pieza que ya se da por buena (pesos)<input name="utilidad_minima_pz" type="number" step="50" min="0" defaultValue={Number(((get("utilidad_minima_pz") ?? {}) as { valor?: number }).valor ?? 1500)} /></label>
             </div>
-            <p className="muted">1.8 quiere decir: si la pieza te cuesta 1,000, Mercado Libre te debe dejar al menos 1,800 ya sin comisiones ni retenciones. Se usa en la pantalla Precios y margen.</p>
+            <p className="muted">1.8 quiere decir: si la pieza te cuesta 1,000, Mercado Libre te debe dejar al menos 1,800 ya sin comisiones ni retenciones. Se usa en la pantalla Precios y margen; ahí mismo marcas qué productos o colores están en liquidación. Si una pieza ya deja más de la utilidad indicada (por ejemplo 1,500), se acepta aunque el margen sea menor al objetivo.</p>
             <p className="muted">Ejemplo: si te depositan $600,000 al mes y reinviertes 60%, el pedido sugerido no pasará de $360,000.</p>
             <button className="btn" type="submit">Guardar</button>
           </div>
