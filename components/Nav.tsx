@@ -8,6 +8,7 @@ const links = [
   { href: "/reporte", label: "Reporte mensual" },
   { href: "/pedido", label: "Qué pedir" },
   { href: "/ventas", label: "Ventas ML" },
+  { href: "/reclamos", label: "Reclamos" },
   { href: "/directas", label: "Ventas directas" },
   { href: "/gastos", label: "Gastos y proveedores" },
   { href: "/stock", label: "Stock en Full" },
