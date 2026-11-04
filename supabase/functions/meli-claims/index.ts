@@ -52,6 +52,25 @@ async function getToken(): Promise<string> {
   return await refreshToken();
 }
 
+/** Re-autorización: canjea el code (TG-...) que ML pone en la URL de retorno y guarda los tokens nuevos (con los permisos actuales de la app). */
+async function exchangeCode(code: string, redirectUri: string, stats: Any) {
+  if (!/^TG-/.test(code) || !redirectUri) throw new Error("Falta code (TG-...) o redirect_uri");
+  const c = creds ?? (await loadCreds());
+  const res = await fetch(API + "/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({ grant_type: "authorization_code", client_id: c.app_id, client_secret: c.client_secret, code, redirect_uri: redirectUri }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error("No se pudo canjear el code: " + JSON.stringify(body));
+  if (Number(body.user_id) !== Number(c.meli_user_id)) throw new Error(`El code es de otra cuenta (${body.user_id})`);
+  const expires = new Date(Date.now() + (body.expires_in ?? 21600) * 1000).toISOString();
+  const { error } = await sb.rpc("meli_save_tokens", { p_access: body.access_token, p_refresh: body.refresh_token, p_expires: expires });
+  if (error) throw new Error("No se pudieron guardar los tokens: " + error.message);
+  creds = { ...c, access_token: body.access_token, refresh_token: body.refresh_token, expires_at: expires };
+  stats.autorizado = { scope: body.scope };
+}
+
 class MeliError extends Error {
   constructor(public status: number, public path: string, public body: string) {
     super(`MELI ${status} ${path}: ${body.slice(0, 300)}`);
@@ -319,6 +338,7 @@ Deno.serve(async (req: Request) => {
   }).eq("id", run?.id);
   try {
     await loadCreds();
+    if (kind === "code") await exchangeCode(String(body.code ?? ""), String(body.redirect_uri ?? ""), stats);
     if (kind === "actions" || kind === "all") await runActions(stats, errors);
     if (kind === "reputation" || kind === "all" || kind === "sync") await syncReputation(stats).catch((e) => errors.push(String(e)));
     if (kind === "sync" || kind === "all") await syncClaims(stats, errors);
