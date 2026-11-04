@@ -138,8 +138,8 @@ async function claimIds(stats: Any): Promise<number[]> {
   // 1) Abiertos (todos) y 2) recientes, por la búsqueda de la API.
   // La doc recomienda filtrar siempre por el vendedor como respondent (status=opened solo es caro y pega con el rate limit).
   const me = `players.role=respondent&players.user_id=${creds!.meli_user_id}`;
-  const since = new Date(Date.now() - 90 * 86400_000).toISOString().replace("Z", "-0000");
-  for (const q of [`${me}&status=opened`, `${me}&range=date_created:after:${since}&sort=date_created:desc`]) {
+  // Los cerrados recientes salen de las órdenes (mediations); el filtro range de la doc da 400 en MLM.
+  for (const q of [`${me}&status=opened`]) {
     try {
       for (let offset = 0; offset < 2000 && timeLeft() > 60_000; offset += 100) {
         const r = await get(`/post-purchase/v1/claims/search?${q}&limit=100&offset=${offset}`);
