@@ -1,5 +1,6 @@
 // Edge Function de diagnóstico: hace GETs arbitrarios a la API de Mercado Libre con el token guardado
-// y devuelve estado + inicio del cuerpo. POST { paths: [{ path, headers? }] } con header x-sync-key.
+// y devuelve estado + inicio del cuerpo. POST { paths: [{ path, headers?, method?, body? }] } con header x-sync-key.
+// method/body permiten escrituras puntuales (p. ej. PUT /items/{id} para corregir un título).
 import { createClient } from "npm:@supabase/supabase-js@2.49.0";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -14,9 +15,20 @@ Deno.serve(async (req: Request) => {
   for (const p of body.paths ?? []) {
     try {
       const url = String(p.path).startsWith("http") ? p.path : "https://api.mercadolibre.com" + p.path;
-      const res = await fetch(url, { headers: { Authorization: "Bearer " + c.access_token, Accept: "application/json", ...(p.headers ?? {}) } });
+      const method = String(p.method ?? "GET").toUpperCase();
+      const hasBody = p.body !== undefined && method !== "GET";
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: "Bearer " + c.access_token,
+          Accept: "application/json",
+          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+          ...(p.headers ?? {}),
+        },
+        body: hasBody ? JSON.stringify(p.body) : undefined,
+      });
       const text = await res.text();
-      out.push({ path: p.path, status: res.status, body: text.slice(0, Number(body.max ?? 1500)) });
+      out.push({ path: p.path, method, status: res.status, body: text.slice(0, Number(body.max ?? 1500)) });
     } catch (e) {
       out.push({ path: p.path, error: String(e) });
     }
