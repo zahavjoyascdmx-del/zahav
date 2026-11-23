@@ -496,9 +496,19 @@ async function syncAdsDay(day: string, stats: Json) {
     if ((r?.results ?? []).length < 50) break;
   }
   const ads: Json[] = [];
+  // Estado actual de cada anuncio (active / hold / paused), aunque no tenga métricas: solo con el día de hoy.
+  const estado: Json[] = [];
+  const esHoy = day === cdmxDate();
   for (let offset = 0; offset < 2000; offset += 100) {
     const r = await meli(`${base}/ads/search?limit=100&offset=${offset}&${q}`, 0, ADS_HEADERS, true);
     for (const a of r?.results ?? []) {
+      if (esHoy && a.item_id) {
+        estado.push({
+          item_id: a.item_id, campaign_id: a.campaign_id ?? null, ad_group_id: a.ad_group_id ?? null,
+          status: a.status ?? null, status_raw: a.status_raw ?? null, title: a.title ?? null,
+          logistic_type: a.logistic_type ?? null, synced_at: new Date().toISOString(),
+        });
+      }
       const m = a.metrics ?? {};
       if (!(m.cost > 0 || m.clicks > 0 || m.prints > 0 || m.units_quantity > 0)) continue;
       ads.push({
@@ -512,6 +522,7 @@ async function syncAdsDay(day: string, stats: Json) {
   }
   await upsert("meli_ads_daily", camp, "fecha,campaign_id");
   await upsert("meli_ads_items_daily", ads, "fecha,item_id");
+  await upsert("meli_ads_items", estado, "item_id");
   stats.ads_days = ((stats.ads_days as number) ?? 0) + 1;
   stats.ads_rows = ((stats.ads_rows as number) ?? 0) + camp.length + ads.length;
 }
@@ -654,6 +665,8 @@ Deno.serve(async (req: Request) => {
     if (has("payments", "incremental", "full")) await syncPayments(stats, errors, Number(body.limit ?? 150));
     if (has("visits", "daily", "full")) await syncVisits(stats, errors);
     if (has("ads", "daily", "full")) await syncAds(stats, errors, Number(body.days ?? 3));
+    // Cada hora: gasto de hoy y estado de los anuncios (para el aviso de publicidad sin stock en Full).
+    if (has("incremental")) await syncAds(stats, errors, 1);
     if (has("ads_backfill")) await syncAdsBackfill(stats, errors);
     if (has("billing")) await syncBilling(stats, errors, Number(body.periods ?? 2), Array.isArray(body.keys) ? body.keys.map(String) : undefined);
     if (has("token")) { await refreshToken(); stats.token = "renovado"; }

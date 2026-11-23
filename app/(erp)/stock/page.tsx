@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaCorta, mxn, num } from "@/lib/format";
+import type { PublicidadSinStock } from "@/components/AlertaPublicidad";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,15 @@ function Estado({ s }: { s: string | null }) {
 
 export default async function StockPage() {
   const supabase = await createClient();
-  const [stock, items, vars, prods, oro] = await Promise.all([
+  const [stock, items, vars, prods, oro, pub] = await Promise.all([
     supabase.rpc("stock_full_actual"),
     supabase.from("meli_items").select("item_id,title,status,logistic_type,available_quantity,permalink,product_id,price").neq("status", "closed"),
     supabase.from("meli_variations").select("item_id,variation_id,color,talla,available_quantity,price"),
     supabase.from("products").select("id,grams,cost_fixed,kilates,proveedor"),
     supabase.from("gold_prices").select("proveedor,kilates,precio,mes").order("mes", { ascending: false }),
+    supabase.rpc("publicidad_sin_stock"),
   ]);
+  const publicidad = (pub.data ?? []) as PublicidadSinStock[];
   const rows = (stock.data ?? []) as Row[];
   const itemList = (items.data ?? []) as Item[];
   const varList = (vars.data ?? []) as Variation[];
@@ -101,6 +104,39 @@ export default async function StockPage() {
           <div className="kpi"><div className="label">Margen bruto del stock</div><div className="value">{mxn(totalVenta - totalCosto)}</div><div className="sub">venta − costo, antes de comisiones e impuestos</div></div>
         </div>
       </div>
+
+      {publicidad.length > 0 && (
+        <div className="card" id="publicidad" style={{ marginBottom: 14 }}>
+          <h2 style={{ margin: "0 0 4px" }}>Publicidad sin stock en Full</h2>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Anuncios en campañas activas cuya publicación ya no tiene piezas en Full (agotadas en los últimos 14 días). Si el anuncio está
+            {" "}<b>suspendido por ML</b> no está gastando, pero se vuelve a encender solo cuando llegue stock; si está <b>activo</b> puede seguir gastando.
+            Apágalo en Mercado Libre → Publicidad. Cuando lo pauses o vuelva a haber piezas, desaparece de aquí.
+          </div>
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Publicación</th><th>Campaña</th><th>Anuncio</th><th>Agotado desde</th><th className="num">En camino</th><th className="num">Gasto 7 días</th><th>Qué hacer</th></tr></thead>
+              <tbody>
+                {publicidad.map((p) => (
+                  <tr key={p.item_id}>
+                    <td>{p.permalink ? <a href={p.permalink} target="_blank" rel="noreferrer">{p.title}</a> : p.title}<div className="muted" style={{ fontSize: 12 }}>{p.item_id}</div></td>
+                    <td>{p.campaign_name}</td>
+                    <td>{p.ad_status === "active" ? <span className="tag bad">activo · puede gastar</span> : <span className="tag warn">suspendido por ML</span>}</td>
+                    <td>{p.agotado_desde ? fechaCorta(p.agotado_desde) : "hace tiempo"}</td>
+                    <td className="num">{num(p.en_transito)}</td>
+                    <td className="num">{mxn(p.gasto_7d)}</td>
+                    <td>
+                      {p.campana_sin_stock ? <b>Pausar la campaña completa (ninguna publicación tiene piezas)</b>
+                        : p.en_transito > 0 ? `Llegan ${num(p.en_transito)}: puedes dejarlo encendido`
+                        : "Pausar este anuncio"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <h2 style={{ margin: "18px 0 8px" }}>Mercado Libre Full</h2>
       {groups.map((g) => (
