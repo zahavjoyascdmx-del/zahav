@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaCorta, mxn, num } from "@/lib/format";
 import type { PublicidadSinStock } from "@/components/AlertaPublicidad";
+import type { TallasAgotadas } from "@/components/AlertaTallasPublicidad";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +25,16 @@ function Estado({ s }: { s: string | null }) {
 
 export default async function StockPage() {
   const supabase = await createClient();
-  const [stock, items, vars, prods, oro, pub] = await Promise.all([
+  const [stock, items, vars, prods, oro, pub, tallasPub] = await Promise.all([
     supabase.rpc("stock_full_actual"),
     supabase.from("meli_items").select("item_id,title,status,logistic_type,available_quantity,permalink,product_id,price").neq("status", "closed"),
     supabase.from("meli_variations").select("item_id,variation_id,color,talla,available_quantity,price"),
     supabase.from("products").select("id,grams,cost_fixed,kilates,proveedor"),
     supabase.from("gold_prices").select("proveedor,kilates,precio,mes").order("mes", { ascending: false }),
     supabase.rpc("publicidad_sin_stock"),
+    supabase.rpc("publicidad_tallas_agotadas"),
   ]);
+  const tallasAgotadas = (tallasPub.data ?? []) as TallasAgotadas[];
   const publicidad = (pub.data ?? []) as PublicidadSinStock[];
   const rows = (stock.data ?? []) as Row[];
   const itemList = (items.data ?? []) as Item[];
@@ -130,6 +133,34 @@ export default async function StockPage() {
                         : p.en_transito > 0 ? `Llegan ${num(p.en_transito)}: puedes dejarlo encendido`
                         : "Pausar este anuncio"}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tallasAgotadas.length > 0 && (
+        <div className="card" id="tallas-publicidad" style={{ marginBottom: 14 }}>
+          <h2 style={{ margin: "0 0 4px" }}>Tallas agotadas con publicidad activa</h2>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            La publicación sigue activa (quedan otras tallas), así que ML no frena el anuncio: la gente llega, no encuentra su talla y el clic se paga igual.
+            Aparecen las que en los últimos 60 días vendieron al menos el {num(tallasAgotadas[0].umbral)}% de sus piezas en tallas que hoy tienen 0 en Full.
+            Resurte esas tallas, o baja el presupuesto / pausa el anuncio mientras llegan.
+          </div>
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Publicación</th><th>Campaña</th><th className="num">% de ventas agotado</th><th>Tallas agotadas que se venden (piezas vendidas)</th><th className="num">En camino</th><th className="num">Gasto 7 días</th></tr></thead>
+              <tbody>
+                {tallasAgotadas.map((t) => (
+                  <tr key={t.item_id}>
+                    <td>{t.permalink ? <a href={t.permalink} target="_blank" rel="noreferrer">{t.title}</a> : t.title}<div className="muted" style={{ fontSize: 12 }}>{num(t.tallas_agotadas)} de {num(t.tallas)} tallas en 0 · quedan {num(t.disponible)} pzas</div></td>
+                    <td>{t.campaign_name}</td>
+                    <td className="num"><span className={`tag ${Number(t.pct) >= 70 ? "bad" : "warn"}`}>{num(t.pct)}%</span><div className="muted" style={{ fontSize: 12 }}>{num(t.vendidas_agotadas)} de {num(t.vendidas)} pzas</div></td>
+                    <td>{t.agotadas_que_venden ?? "—"}</td>
+                    <td className="num">{num(t.en_transito_agotadas)}</td>
+                    <td className="num">{mxn(t.gasto_7d)}</td>
                   </tr>
                 ))}
               </tbody>

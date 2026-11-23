@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AlertasFull } from "@/components/AlertasFull";
 import { AlertaLiquidacion } from "@/components/AlertaLiquidacion";
 import { AlertaPublicidad } from "@/components/AlertaPublicidad";
+import { AlertaTallasPublicidad } from "@/components/AlertaTallasPublicidad";
 import { Kpi } from "@/components/Kpi";
 import { addDays, fechaCorta, fechaHora, mxn, num, todayCdmx } from "@/lib/format";
 
@@ -37,6 +38,7 @@ export default async function Home() {
       <AlertasFull />
       <AlertaLiquidacion />
       <AlertaPublicidad />
+      <AlertaTallasPublicidad />
       <div className="page-head">
         <div>
           <h1>Resumen</h1>
